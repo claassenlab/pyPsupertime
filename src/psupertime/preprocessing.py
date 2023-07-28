@@ -8,58 +8,77 @@ from sklearn.utils import class_weight
 
 
 def restructure_y_to_bin(y_orig):
-        '''
-        The labels are converted to binary, such that the threshold from 0-1
-        corresponds from changing from label $l_i$ to $l_{i+1}$. 
-        $k$ copies of the label vector are concatenated such that for every
-        vector $j$ the labels  $l_i$ with $i<j$ are converted to 0 and the 
-        labels $i < j$ are converted to 1.
-        '''
+    """ 
+    The given labels are converted to a binary representation,
+    such that the threshold from 0-1 corresponds from changing from label
+    $l_i$ to $l_{i+1}$. 
+    $k$ copies of the label vector are concatenated such that for every
+    vector $j$ the labels  $l_i$ with $i<j$ are converted to 0 and the 
+    labels $i < j$ are converted to 1.
 
-        y_classes = np.unique(y_orig)
-        k = len(y_classes)
+    :param y_orig: Original data set labels
+    :type y_orig: Iterable
+    :return: Restructured Labels: array of length n * k
+    :rtype: numpy array
+    """
+    y_classes = np.unique(y_orig)
+    k = len(y_classes)
 
-        y_bin = []
-        for ki in range(1,k):
-            thresh = y_classes[ki]
-            y_bin += [int(x >= thresh) for x in y_orig]
+    y_bin = []
+    for ki in range(1,k):
+        thresh = y_classes[ki]
+        y_bin += [int(x >= thresh) for x in y_orig]
 
-        y_bin = np.array(y_bin)
+    y_bin = np.array(y_bin)
 
-        return y_bin
+    return y_bin
 
 
 def restructure_X_to_bin(X_orig, n_thresholds):
-        '''
-        The count matrix is extended with copies of itself, to fit the converted label
-        vector FOR NOW. For big problems, it could suffice to have just one label 
-        vector and perform and iterative training.
-        To train the thresholds, $k$ columns are added to the count matrix and 
-        initialized to zero. Each column column represents the threshold for a 
-        label $l_i$ and is set to 1, exactly  where that label $l_1$ occurs.
-        '''
+    """
+    The count matrix is extended with copies of itself, to fit the converted label
+    vector FOR NOW. For big problems, it could suffice to have just one label 
+    vector and perform and iterative training.
+    To train the thresholds, $k$ columns are added to the count matrix and 
+    initialized to zero. Each column column represents the threshold for a 
+    label $l_i$ and is set to 1, exactly  where that label $l_1$ occurs.
 
-        # X training matrix
-        X_bin = np.concatenate([X_orig.copy()] * (n_thresholds))
-        # Add thresholds
-        num_el = X_orig.shape[0] * (n_thresholds)
+    :param X_orig: input data
+    :type X_orig: numpy array with shape (n_cells, n_genes)
+    :param n_thresholds: number of thresholds to be learned - equal to num_unique_labels - 1
+    :type n_thresholds: integer
+    :return: Restructured matrix of shape (n_cells * n_thresholds, n_genes + n_thresholds)
+    :rtype: numpy array
+    """
 
-        for ki in range(n_thresholds):
-            temp = np.repeat(0, num_el).reshape(X_orig.shape[0], (n_thresholds))
-            temp[:,ki] = 1
-            if ki > 0:
-                thresholds = np.concatenate([thresholds, temp])
-            else:
-                thresholds = temp
+    # X training matrix
+    X_bin = np.concatenate([X_orig.copy()] * (n_thresholds))
+    # Add thresholds
+    num_el = X_orig.shape[0] * (n_thresholds)
 
-        X_bin = np.concatenate([X_bin, thresholds], axis=1)
+    for ki in range(n_thresholds):
+        temp = np.repeat(0, num_el).reshape(X_orig.shape[0], (n_thresholds))
+        temp[:,ki] = 1
+        if ki > 0:
+            thresholds = np.concatenate([thresholds, temp])
+        else:
+            thresholds = temp
 
-        return X_bin
+    X_bin = np.concatenate([X_bin, thresholds], axis=1)
+
+    return X_bin
 
 
 def transform_labels(y, labels=None):
     """
     Transforms a target vector, such that it contains successive labels starting at 0.
+
+    :param y: iterable containing the labels of a dataset
+    :type y: Iterable
+    :param labels: Set of unique labels in the dataset. By default, np.unique will be called on y.
+    :type labels: Iterable, optional
+    :return: Numpy array with the labels converted
+    :rtype: numpy.array
     """
 
     # if labels are not given, compute
