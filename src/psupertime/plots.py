@@ -11,7 +11,19 @@ import warnings
 
 
 def plot_grid_search(grid_search: RegularizationSearchCV, title="Grid Search Results", figsize=(16,4)):
+    """Plot the weights, scores, and degrees of freedom for a parameter search as a function of the 
+    regularization path. Indicates the best model and most sparse model within one standard error of the 
+    best score based on the averaged cross validation scores. 
 
+    :param grid_search: grid search object
+    :type grid_search: RegularizationSearchCV
+    :param title: Figure title, defaults to "Grid Search Results"
+    :type title: str, optional
+    :param figsize: Size of the matplotlib figure, defaults to (16,4)
+    :type figsize: tuple, optional
+    :return: figure instance 
+    :rtype: matplotlib.pyplot.Figure
+    """
     if not isinstance(grid_search, RegularizationSearchCV):
         raise ValueError("The first argument needs to be a completed GridSearch")
     
@@ -57,7 +69,22 @@ def plot_grid_search(grid_search: RegularizationSearchCV, title="Grid Search Res
 
 
 def plot_model_perf(model, train, test, title="Model Predictions", figsize=(10, 4)):
+    """Print model performance statistics and plot the confusion matrices for the 
+    test and training prediction, respectively.
 
+    :param model: Fitted instance of a PsupertimeBaseModel
+    :type model: PsupertimeBaseModel
+    :param train: X_train, y_train
+    :type train: tuple
+    :param test: X_test, y_test
+    :type test: tuple
+    :param title: Figure title, defaults to "Model Predictions"
+    :type title: str, optional
+    :param figsize: Size of the matplotlib figure, defaults to (16,4)
+    :type figsize: tuple, optional
+    :return: figure instance
+    :rtype: matplotlib.pyplot.Figure
+    """
     if not isinstance(model, PsupertimeBaseModel):
         raise ValueError("The first argument needs to be a fitted sklearn model")
     
@@ -76,7 +103,7 @@ def plot_model_perf(model, train, test, title="Model Predictions", figsize=(10, 
     weights_train = calculate_weights(y_train_trans)
     weights_test = calculate_weights(y_test_trans)
 
-    print("Degrees of freedom", len(np.nonzero(np.array(model.coef_).flatten())[0]))
+    print("Degrees of freedom", len(np.nonzero(np.array(model.coef_).flatten())))
     print("Train:")
     print("Accuracy:", metrics.accuracy_score(y_train_trans, model.predict(X_train)))
     print("Balanced accuracy:", metrics.balanced_accuracy_score(y_train_trans, model.predict(X_train)))
@@ -110,20 +137,11 @@ def plot_identified_gene_coefficients(model, anndata: ad.AnnData,  n_top=30, fig
     if not isinstance(model, PsupertimeBaseModel):
         raise ValueError("model must be an instance of PsupertimeBaseModel")
 
-    psuper_weights_key = "psupertime_weights"
-    if not anndata.var.get(psuper_weights_key, False):
-        warnings.warn("anndata contains no weight information for Psupertime." + \
-                      "Running `PsupertimeBaseModel.gene_weights()` now.")
-        var_copy = model.gene_weights(anndata, inplace=False)
-    
-    else:
-        # convert to numpy and flatten to work for any kind of iterable native sklearn models
-        psuper_weights = np.array(model.coef_).flatten()
+    # always recalculate gene_weights
+    psuper_weights_key = "psupertime_weight"
+    var_copy = model.gene_weights(anndata, inplace=False)
 
-        var_copy = pd.DataFrame({psuper_weights_key: psuper_weights},
-                                index=anndata.var.index.copy())
-
-    sorted_idx = np.argsort(np.abs(psuper_weights))
+    sorted_idx = np.argsort(np.abs(var_copy[psuper_weights_key]))
     max_val = np.abs(var_copy[psuper_weights_key][sorted_idx][-1])
 
     fig = plt.figure(figsize=figsize)
@@ -151,15 +169,9 @@ def plot_labels_over_psupertime(model, anndata: ad.AnnData, label_key, figsize=(
     if not isinstance(model, PsupertimeBaseModel):
         raise ValueError("model must be an instance of PsupertimeBaseModel")
 
+    # always recalculate psupertime
     psupertime_key = "psupertime"
-    if not anndata.obs.get(psupertime_key, False):
-        warnings.warn("anndata contains no latent time prediction by Psupertime." + \
-                      "Running `PsupertimeBaseModel.predict_psuper()` now.")
-        obs_copy = model.predict_psuper(anndata, inplace=False)
-    
-    else:
-        obs_copy = anndata.obs.copy()
-
+    obs_copy = model.predict_psuper(anndata, inplace=False)
 
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111)
