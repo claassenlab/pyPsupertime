@@ -37,8 +37,12 @@ class RegularizationSearchCV:
                 raise ValueError("Parameter 'reg_path' is not Iterable or cannot be converted to float")
 
         self.estimator = estimator
-        if not isinstance(self.estimator, BaseEstimator):
-            raise ValueError("Parameter 'estimator' is not a sklern.base.BaseEstimator")
+        try:
+            if not isinstance(self.estimator(), BaseEstimator):
+                raise ValueError("Parameter 'estimator' is not a sklearn.base.BaseEstimator")
+        except TypeError as e:
+            print(e)
+            raise ValueError("Parameter 'estimator' is not a valid BaseEstimator class. Did you pass an instance?")
 
         self.reg_param_name = reg_param_name
         try:
@@ -91,8 +95,9 @@ class RegularizationSearchCV:
             self.scores_std.append(np.std(cv["test_score"]))
             self.fitted_estimators.append(cv["estimator"][best_idx])
 
-            # TODO: disregard the thresholds when fitting the binary logistic model
-            self.dof.append(np.count_nonzero(np.array(cv["estimator"][best_idx].coef_).flatten()))
+            # TODO: Disregard the threshold weights when running grid search on a binary model
+            weights = np.array(cv["estimator"][best_idx].coef_).flatten()
+            self.dof.append(np.count_nonzero(weights))
 
         print("Regularization: done")
         self.is_fitted_ = True
