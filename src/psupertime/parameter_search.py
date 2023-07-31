@@ -2,6 +2,7 @@ import numpy as np
 from collections.abc import Iterable
 from sklearn.model_selection import cross_validate
 from sklearn.base import BaseEstimator, clone
+from copy import copy
 import warnings
 
 
@@ -16,8 +17,10 @@ class RegularizationSearchCV:
                  reg_high=1, 
                  reg_low=0.001, 
                  n_jobs=-1, 
-                 n_folds=5):
+                 n_folds=5,
+                 verbosity=1):
         
+        self.verbosity = verbosity
         self.is_fitted = False
         self.n_jobs = n_jobs
         self.n_folds = n_folds
@@ -69,10 +72,20 @@ class RegularizationSearchCV:
         self.fitted_estimators = []
 
     def fit(self, X, y, fit_params=dict(), estimator_params=dict()):
+       
+        # copy the params, in order to not mutate the original object
+        estimator_params = copy(estimator_params)
+
+        if not isinstance(estimator_params, dict):
+            raise ValueError("estimator_params must be of type dict")
+
+        if not isinstance(fit_params, dict):
+            raise ValueError("fit_params must be of type dict")
 
         for i, reg in enumerate(self.reg_path):
             
-            print("Regularization: %s/%s" % (i+1, len(self.reg_path)), sep="", end="\r")
+            if self.verbosity >= 1:
+                print("Regularization: %s/%s" % (i+1, len(self.reg_path)), sep="", end="\r")
 
             estimator_params[self.reg_param_name] = reg
             cv = cross_validate(estimator=self.estimator(**estimator_params),
@@ -98,11 +111,30 @@ class RegularizationSearchCV:
             weights = np.array(cv["estimator"][best_idx].coef_).flatten()
             self.dof.append(np.count_nonzero(weights))
 
-        print("Regularization: done     ")
+        if self.verbosity >= 1:
+            print("Regularization: done   ")
+
         self.is_fitted_ = True
         return self
 
-    def get_optimal_lambda(self, method="1se", index=None):
+    def get_optimal_regularization(self, method="1se", index=None):
+        """Returns a tuple of (idx, reg_param) where reg_param is the optimal regularization value
+        according to the chosen method and idx its iteration step in the search.
+
+        Note: if method is "1se", but only a zero degree-of-freedom model can be found, 
+        it automatically retries with method "best".
+        
+
+        :param method: Specify the method by which optimality is determined. Must be one of {"1se", "best", "index"} defaults to "1se"
+        :type method: str, optional
+        :param index: Model at specific index that should be returned.
+         Only if method="index" is selected, defaults to None
+        :type index: integer, optional
+        :raises ValueError: When an invalid method parameter is given
+        :raises ValueError: When method "index" is chosen and the given index is out of bounds
+        :return: tuple of (idx, optimal_param)
+        :rtype: tuple
+        """
 
         if not method in ["1se", "best", "index"]:
             raise ValueError("The method parameter should be one of '1se' or 'best'")
@@ -110,11 +142,11 @@ class RegularizationSearchCV:
         if method =="index":
             if index is None or (index >= len(self.scores) or index < 0): 
                 raise ValueError("Parmeter `index` must be set to a valid cv index, if method='index' is selected.")
-            return (self.lambdas[index], index)
+            return (self.reg_path[index], index)
 
         if method == "best":
             idx = np.argmax(self.scores)
-            return (self.lambdas[idx], idx)
+            return (self.reg_path[idx], idx)
             
         if method == "1se":
             n = len(self.dof)
@@ -137,15 +169,25 @@ class RegularizationSearchCV:
                 # and stop if there is no sufficiently good sparser model
                 if (s > thresh and d != 0) or \
                    (i == max_idx):
-                    return (self.lambdas[i], i)
+                    return (self.reg_path[i], i)
             
-            print("Warning: No model for method '1se' with non-zero degrees of freedom could be found. Returning the best scoring model")
-            return self.get_optimal_lambda(method="best")
+            warnings.warn("No model for method '1se' with non-zero degrees of freedom could be found. Returning the best scoring model")
+            return self.get_optimal_regularization(method="best")
         
     def get_optimal_parameters(self, *args, **kwargs):
-        lamb, idx = self.get_optimal_lambda(*args, **kwargs)
+        """ Returns the parameters of model with optimal reg_param. See `get_optimal_regularization` for more details
+
+        :return: Model parameters
+        :rtype: dict
+        """
+        reg, idx = self.get_optimal_regularization(*args, **kwargs)
         return self.fitted_estimators[idx].get_params()
 
     def get_optimal_model(self, *args, **kwargs):
+        """ Returns the model with optimal reg_param. See `get_optimal_regularization` for more details
+
+        :return: Optimal model
+        :rtype: sklearn.base.BaseModel
+        """
         return self.estimator(**self.get_optimal_parameters(*args, **kwargs))
 
