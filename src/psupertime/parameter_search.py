@@ -92,7 +92,7 @@ class RegularizationSearchCV:
             self.fitted_estimators.append(cv["estimator"][best_idx])
 
             # TODO: disregard the thresholds when fitting the binary logistic model
-            self.dof.append(np.count_nonzero(cv["estimator"][best_idx].coef_))
+            self.dof.append(np.count_nonzero(np.array(cv["estimator"][best_idx].coef_).flatten()))
 
         print("Regularization: done")
         self.is_fitted_ = True
