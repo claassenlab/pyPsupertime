@@ -1,7 +1,7 @@
 import numpy as np
 from collections.abc import Iterable
 from sklearn.model_selection import cross_validate
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, clone
 import warnings
 
 
@@ -38,18 +38,17 @@ class RegularizationSearchCV:
 
         self.estimator = estimator
         try:
-            if not isinstance(self.estimator(), BaseEstimator):
-                raise ValueError("Parameter 'estimator' is not a sklearn.base.BaseEstimator")
+            est_instance = self.estimator()
         except TypeError as e:
             print(e)
-            raise ValueError("Parameter 'estimator' is not a valid BaseEstimator class. Did you pass an instance?")
+            raise ValueError("Parameter 'estimator' could not be initiated. Did you pass an instance?")
+
+        if not isinstance(est_instance, BaseEstimator):
+                raise ValueError("Parameter 'estimator' is not a sklearn.base.BaseEstimator")
 
         self.reg_param_name = reg_param_name
-        try:
-            _ = self.estimator().get_params()[self.reg_param_name]
-        except KeyError as e:
-            print(e)
-            raise ValueError("Parameter 'reg_param_name' is not a valid parameter for %s" % self.estimator.__class__) 
+        if not hasattr(est_instance, self.reg_param_name):
+            raise ValueError("Parameter 'reg_param_name' is not a valid parameter for %s" % self.estimator.__name__) 
 
         # average cross validation scores for each lambda
         self.scores = []
@@ -99,7 +98,7 @@ class RegularizationSearchCV:
             weights = np.array(cv["estimator"][best_idx].coef_).flatten()
             self.dof.append(np.count_nonzero(weights))
 
-        print("Regularization: done")
+        print("Regularization: done     ")
         self.is_fitted_ = True
         return self
 
@@ -150,5 +149,3 @@ class RegularizationSearchCV:
     def get_optimal_model(self, *args, **kwargs):
         return self.estimator(**self.get_optimal_parameters(*args, **kwargs))
 
-    def get_estimator_weights_by_lambdas(self):
-        pass

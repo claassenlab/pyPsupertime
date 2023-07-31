@@ -22,20 +22,27 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
     random_state: int = 1234
     coef_: np.array
     intercept_: np.array
-    k: int = 0
+    k_: int = 0
     classes_: np.array
     is_fitted_: bool = False
 
-    def _get_binary_estimator(self):
+    @abstractmethod
+    def _binary_estimator_factory():
+        raise NotImplementedError()
+ 
+    def get_binary_estimator(self):
+        if self.binary_estimator_ is None:
+            self.binary_estimator_  = self._binary_estimator_factory()
+
         if not isinstance(self.binary_estimator_, BaseEstimator):
-            raise ValueError("'binary_estimator_ not initialized or is not a 'sklearn.base.BaseEstimator'")
+            raise ValueError("The underlying 'binary_estimator' is not a sklearn.base.BaseEstimator. Got this instead: ", self.binary_estimator_)
         
         return self.binary_estimator_
 
     def _before_fit(self, data, targets):
         data, targets = check_X_y(data, targets)
         self.classes_ = np.unique(targets)
-        self.k = len(self.classes_) - 1
+        self.k_ = len(self.classes_) - 1
         return data, targets
     
     def _after_fit(self, model):
@@ -43,19 +50,19 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
 
         # extract the thresholds and weights
         # from the 2D coefficients matrix in the sklearn model
-        self.intercept_ = np.array(model.coef_[0, -self.k:]) + model.intercept_  # thresholds
-        self.coef_ = model.coef_[0, :-self.k]   # weights
+        self.intercept_ = np.array(model.coef_[0, -self.k_:]) + model.intercept_  # thresholds
+        self.coef_ = model.coef_[0, :-self.k_]   # weights
 
     def fit(self, data, targets, sample_weight=None):
         data, targets = self._before_fit(data, targets)
 
         # convert to binary problem
-        data = restructure_X_to_bin(data, self.k)
+        data = restructure_X_to_bin(data, self.k_)
         targets = restructure_y_to_bin(targets)
 
-        model = self._get_binary_estimator()
+        model = self.get_binary_estimator()
         
-        weights = np.tile(sample_weight, self.k) if sample_weight is not None else None
+        weights = np.tile(sample_weight, self.k_) if sample_weight is not None else None
         model.fit(data, targets, sample_weight=weights)
         self._after_fit(model)
 
@@ -65,10 +72,10 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         warnings.filterwarnings("once")
 
         transform = X @ self.coef_        
-        logit = np.zeros(X.shape[0] * (self.k)).reshape(X.shape[0], self.k)
+        logit = np.zeros(X.shape[0] * (self.k_)).reshape(X.shape[0], self.k_)
         
         # calculate logit
-        for i in range(self.k):
+        for i in range(self.k_):
             # Clip exponents that are larger than MAX_EXP before np.exp for numerical stability
             # this will cause warnings and nans otherwise!
             temp = self.intercept_[i] + transform
@@ -76,14 +83,14 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
             exp = np.exp(temp)
             logit[:, i] = exp / (1 + exp)
 
-        prob = np.zeros(X.shape[0] * (self.k + 1)).reshape(X.shape[0], self.k + 1)
+        prob = np.zeros(X.shape[0] * (self.k_ + 1)).reshape(X.shape[0], self.k_ + 1)
         # calculate differences
-        for i in range(self.k + 1):
+        for i in range(self.k_ + 1):
             if i == 0:
                 prob[:, i] = 1 - logit[:, i]
-            elif i < self.k:
+            elif i < self.k_:
                 prob[:, i] = logit[:, i-1] - logit[:, i]
-            elif i == self.k:
+            elif i == self.k_:
                 prob[:, i] = logit[:, i-1]
         
         warnings.filterwarnings("always")
@@ -142,34 +149,49 @@ class BaselineSGDModel(PsupertimeBaseModel):
                  class_weight=None,
                  warm_start=False,
                  average=False):
+
+        # SGD parameters
+        self.eta0 = eta0
+        self.learning_rate = learning_rate
+        self.max_iter = max_iter
+        self.random_state = random_state
+        self.regularization = regularization
+        self.loss = loss
+        self.penalty = penalty
+        self.l1_ratio = l1_ratio
+        self.fit_intercept = fit_intercept
+        self.shuffle = shuffle
+        self.verbose = verbose
+        self.epsilon = epsilon
+        self.n_jobs = n_jobs
+        self.power_t = power_t
+        self.validation_fraction = validation_fraction
+        self.class_weight = class_weight
+        self.warm_start = warm_start
+        self.average = average
+        self.early_stopping = early_stopping
+        self.n_iter_no_change = n_iter_no_change
+        self.tol = tol
         
-        # underlying binary logistic model
-        self.binary_estimator_ = SGDClassifier(eta0 = eta0,
-                                               learning_rate = learning_rate,
-                                               max_iter = max_iter,
-                                               random_state = random_state,
-                                               alpha = regularization,
-                                               loss = loss,
-                                               penalty = penalty,
-                                               l1_ratio = l1_ratio,
-                                               fit_intercept = fit_intercept,
-                                               shuffle = shuffle,
-                                               verbose = verbose,
-                                               epsilon = epsilon,
-                                               n_jobs = n_jobs,
-                                               power_t = power_t,
-                                               validation_fraction = validation_fraction,
-                                               class_weight = class_weight,
-                                               warm_start = warm_start,
-                                               average = average,
-                                               early_stopping = early_stopping,
-                                               n_iter_no_change = n_iter_no_change,
-                                               tol = tol)
-
-        # fitting/data parameters
-        self.k = None
-        self.intercept_ = []
-        self.coef_ = []
-
-        # random
-        self.rng = default_rng(seed=self.random_state)
+    def _binary_estimator_factory(self):
+        return SGDClassifier(eta0 = self.eta0,
+                            learning_rate = self.learning_rate,
+                            max_iter = self.max_iter,
+                            random_state = self.random_state,
+                            alpha = self.regularization,
+                            loss = self.loss,
+                            penalty = self.penalty,
+                            l1_ratio = self.l1_ratio,
+                            fit_intercept = self.fit_intercept,
+                            shuffle = self.shuffle,
+                            verbose = self.verbose,
+                            epsilon = self.epsilon,
+                            n_jobs = self.n_jobs,
+                            power_t = self.power_t,
+                            validation_fraction = self.validation_fraction,
+                            class_weight = self.class_weight,
+                            warm_start = self.warm_start,
+                            average = self.average,
+                            early_stopping = self.early_stopping,
+                            n_iter_no_change = self.n_iter_no_change,
+                            tol = self.tol)
