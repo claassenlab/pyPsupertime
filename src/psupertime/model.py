@@ -252,7 +252,7 @@ class BatchSGDModel(BaselineSGDModel):
         self.k_ = None
         self.intercept_ = []
         self.coef_ = []
-        
+
     def fit(self, X, y, sample_weight=None):
 
         rng = np.random.default_rng(self.random_state)
@@ -260,16 +260,14 @@ class BatchSGDModel(BaselineSGDModel):
 
         X, y = self._before_fit(X, y)
 
-        # thresholds matrix 
-        thresholds = np.identity(self.k_)
-        n = X.shape[0]
-
         if self.early_stopping:
             X, X_test, y, y_test = train_test_split(X, y, test_size=0.1, random_state=rng.integers(9999))
             y_test_bin = restructure_y_to_bin(y_test)
 
+        n = X.shape[0]
         y_bin = restructure_y_to_bin(y)
         sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+        thresholds = np.identity(self.k_)
 
         cur_iter = 0
         best_score = - np.inf
@@ -277,7 +275,7 @@ class BatchSGDModel(BaselineSGDModel):
         while cur_iter < self.max_iter:
 
             cur_iter += 1
-   
+
             start = 0
             for i in range(1, self.n_batches+1):
                 end = (i * len(y_bin) // self.n_batches)
@@ -291,7 +289,6 @@ class BatchSGDModel(BaselineSGDModel):
             
             # Early stopping using the test data 
             if self.early_stopping:
-                # THIS WOULD NOT WORK VERY WELL: Needs Validation Data
                 cur_score = model.score(X_test, y_test_bin)
                 if cur_score - self.tol > best_score:
                     best_score = cur_score
