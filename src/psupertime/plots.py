@@ -103,7 +103,7 @@ def plot_model_perf(model, train, test, title="Model Predictions", figsize=(10, 
     weights_train = calculate_weights(y_train_trans)
     weights_test = calculate_weights(y_test_trans)
 
-    print("Degrees of freedom", len(np.nonzero(np.array(model.coef_).flatten())))
+    print("Degrees of freedom", np.count_nonzero(np.array(model.coef_).flatten()))
     print("Train:")
     print("Accuracy:", metrics.accuracy_score(y_train_trans, model.predict(X_train)))
     print("Balanced accuracy:", metrics.balanced_accuracy_score(y_train_trans, model.predict(X_train)))
