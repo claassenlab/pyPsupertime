@@ -10,7 +10,7 @@ import pandas as pd
 from numpy.random import default_rng
 import warnings
 
-from .preprocessing import restructure_X_to_bin, restructure_y_to_bin
+from .preprocessing import restructure_X_to_bin, restructure_y_to_bin, transform_labels
 
 
 # Maximum positive number before numpy 64bit float overflows in np.exp()
@@ -41,7 +41,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         return self.binary_estimator_
 
     def _before_fit(self, data, targets):
-        data, targets = check_X_y(data, targets)
+        data, targets = check_X_y(data, transform_labels(targets))
         self.classes_ = np.unique(targets)
         self.k_ = len(self.classes_) - 1
         return data, targets
@@ -198,7 +198,7 @@ class BaselineSGDModel(PsupertimeBaseModel):
                             tol = self.tol)
 
 
-class BatchSGDModel(BaselineSGDModel):
+class BatchSGDModel(PsupertimeBaseModel):
 
     def __init__(self,
                  n_batches=1,
@@ -253,21 +253,44 @@ class BatchSGDModel(BaselineSGDModel):
         self.intercept_ = []
         self.coef_ = []
 
+    def _binary_estimator_factory(self):
+        return SGDClassifier(eta0 = self.eta0,
+                            learning_rate = self.learning_rate,
+                            max_iter = self.max_iter,
+                            random_state = self.random_state,
+                            alpha = self.regularization,
+                            loss = self.loss,
+                            penalty = self.penalty,
+                            l1_ratio = self.l1_ratio,
+                            fit_intercept = self.fit_intercept,
+                            shuffle = self.shuffle,
+                            verbose = self.verbose,
+                            epsilon = self.epsilon,
+                            n_jobs = self.n_jobs,
+                            power_t = self.power_t,
+                            validation_fraction = self.validation_fraction,
+                            class_weight = self.class_weight,
+                            warm_start = self.warm_start,
+                            average = self.average,
+                            early_stopping = False,  # has to be false to use partial_fit
+                            n_iter_no_change = self.n_iter_no_change,
+                            tol = self.tol)
+
     def fit(self, X, y, sample_weight=None):
 
         rng = np.random.default_rng(self.random_state)
-        model = self.get_binary_estimator()
-
         X, y = self._before_fit(X, y)
 
         if self.early_stopping:
-            X, X_test, y, y_test = train_test_split(X, y, test_size=0.1, random_state=rng.integers(9999))
-            y_test_bin = restructure_y_to_bin(y_test)
+            X, X_test, y, y_test = train_test_split(X, y, test_size=0.1, stratify=y, random_state=rng.integers(9999))
+            y_test = restructure_y_to_bin(y_test)
+            X_test = restructure_X_to_bin(X_test, self.k_)
 
+        model = self.get_binary_estimator()
+        thresholds = np.identity(self.k_)
         n = X.shape[0]
         y_bin = restructure_y_to_bin(y)
         sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
-        thresholds = np.identity(self.k_)
 
         cur_iter = 0
         best_score = - np.inf
@@ -286,10 +309,10 @@ class BatchSGDModel(BaselineSGDModel):
                 start = end
                 weights = np.array(sample_weight)[idx_mod_n] if sample_weight is not None else None
                 model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
-            
+
             # Early stopping using the test data 
             if self.early_stopping:
-                cur_score = model.score(X_test, y_test_bin)
+                cur_score = model.score(X_test, y_test)
                 if cur_score - self.tol > best_score:
                     best_score = cur_score
                     n_no_improvement = 0
@@ -297,7 +320,7 @@ class BatchSGDModel(BaselineSGDModel):
                     n_no_improvement += 1
                     if n_no_improvement >= self.n_iter_no_change:
                         break
-                                 
+
             if self.shuffle:
                 sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
 
