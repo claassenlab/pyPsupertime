@@ -256,7 +256,7 @@ class BatchSGDModel(BaselineSGDModel):
     def fit(self, X, y, sample_weight=None):
 
         rng = np.random.default_rng(self.random_state)
-        model = self._get_estimator()
+        model = self.get_binary_estimator()
 
         X, y = self._before_fit(X, y)
 
