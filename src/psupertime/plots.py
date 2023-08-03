@@ -129,8 +129,21 @@ def plot_model_perf(model, train, test, title="Model Predictions", figsize=(10, 
     return fig
 
 
-def plot_identified_gene_coefficients(model, anndata: ad.AnnData,  n_top=30, figsize=(6,6), *args, **kwargs):
+def plot_identified_gene_coefficients(model: PsupertimeBaseModel, anndata: ad.AnnData,  n_top=30, figsize=(6,6), *args, **kwargs):
+    """Extracts gene weigts from model and plots the `n_top` highest gene coefficient sorted by their abs value
+    as horizontal bars.
 
+    :param model: fitted model
+    :type model: PsupertimeBaseModel
+    :param anndata: annotation data
+    :type anndata: ad.AnnData
+    :param n_top: number of highest coefficients to plot, defaults to 30
+    :type n_top: int, optional
+    :param figsize: Size of the matplotlib figure, defaults to (6,6)
+    :type figsize: tuple, optional
+    :return: Returns the plot as matplotlib figure
+    :rtype: matplotlib.pyplot.Figure
+    """
     if not isinstance(anndata, ad.AnnData):
         raise ValueError("anndata must be an instanec of anndat.AnnData")
 
@@ -158,7 +171,20 @@ def plot_identified_genes_over_psupertime(n = 20, *args, **kwargs):
     raise NotImplementedError()
 
 
-def plot_labels_over_psupertime(model, anndata: ad.AnnData, label_key, figsize=(10, 5), *args, **kwargs):
+def plot_labels_over_psupertime(model: PsupertimeBaseModel, anndata: ad.AnnData, label_key: str, figsize=(10, 5), *args, **kwargs) -> plt.Figure:
+    """Distirbution of cells, grouped by their ordinal label as a function of the predicted pseudotime.
+
+    :param model: fitted psupertime model
+    :type model: PsupertimeBaseModel
+    :param anndata: annotation data instance
+    :type anndata: ad.AnnData
+    :param label_key: label of the column with ordinal labels in anndata.obs
+    :type label_key: str
+    :param figsize: Size of matplotlib figure, defaults to (10, 5)
+    :type figsize: tuple, optional
+    :return: Matplotlib figure
+    :rtype: matplotlib.pyplot.Figure
+    """
 
     if not isinstance(anndata, ad.AnnData):
         raise ValueError("anndata must be an instanec of anndat.AnnData")
