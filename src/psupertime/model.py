@@ -1,6 +1,7 @@
 from abc import ABC, ABCMeta, abstractmethod
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.model_selection import train_test_split
 from sklearn.linear_model import SGDClassifier
 from sklearn import metrics
 import anndata as ad
@@ -195,3 +196,115 @@ class BaselineSGDModel(PsupertimeBaseModel):
                             early_stopping = self.early_stopping,
                             n_iter_no_change = self.n_iter_no_change,
                             tol = self.tol)
+
+
+class BatchSGDModel(BaselineSGDModel):
+
+    def __init__(self,
+                 n_batches=1,
+                 max_iter=100, 
+                 random_state=1234, 
+                 regularization=0.01, 
+                 n_iter_no_change=5, 
+                 early_stopping=True,
+                 tol=1e-3,
+                 learning_rate="optimal",
+                 eta0=0,
+                 loss='log_loss', 
+                 penalty='elasticnet', 
+                 l1_ratio=1, 
+                 fit_intercept=True, 
+                 shuffle=True, 
+                 verbose=0, 
+                 epsilon=0.1, 
+                 n_jobs=1, 
+                 power_t=0.5, 
+                 validation_fraction=0.1,
+                 class_weight=None,
+                 warm_start=False,
+                 average=False):
+
+        # model hyperparameters
+        self.eta0 = eta0
+        self.learning_rate = learning_rate
+        self.max_iter = max_iter
+        self.random_state = random_state
+        self.regularization = regularization
+        self.loss = loss
+        self.penalty = penalty
+        self.l1_ratio = l1_ratio
+        self.fit_intercept = fit_intercept
+        self.shuffle = shuffle
+        self.verbose = verbose
+        self.epsilon = epsilon
+        self.n_jobs = n_jobs
+        self.power_t = power_t
+        self.validation_fraction = validation_fraction
+        self.class_weight = class_weight
+        self.warm_start = warm_start
+        self.average = average
+        self.early_stopping = early_stopping
+        self.n_iter_no_change = n_iter_no_change
+        self.tol = tol
+        self.n_batches = n_batches
+
+        # data attributes
+        self.k_ = None
+        self.intercept_ = []
+        self.coef_ = []
+        
+    def fit(self, X, y, sample_weight=None):
+
+        rng = np.random.default_rng(self.random_state)
+        model = self._get_estimator()
+
+        X, y = self._before_fit(X, y)
+
+        # thresholds matrix 
+        thresholds = np.identity(self.k_)
+        n = X.shape[0]
+
+        if self.early_stopping:
+            X, X_test, y, y_test = train_test_split(X, y, test_size=0.1, random_state=rng.integers(9999))
+            y_test_bin = restructure_y_to_bin(y_test)
+
+        y_bin = restructure_y_to_bin(y)
+        sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+
+        cur_iter = 0
+        best_score = - np.inf
+        n_no_improvement = 0
+        while cur_iter < self.max_iter:
+
+            cur_iter += 1
+   
+            start = 0
+            for i in range(1, self.n_batches+1):
+                end = (i * len(y_bin) // self.n_batches)
+                idx = sampled_indices[start:end]
+                idx_mod_n = idx % n
+                X_batch = np.concatenate((X[idx_mod_n,:], thresholds[idx // n]), axis=1)
+                y_batch = y_bin[idx]
+                start = end
+                weights = np.array(sample_weight)[idx_mod_n] if sample_weight is not None else None
+                model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
+            
+            # Early stopping using the test data 
+            if self.early_stopping:
+                # THIS WOULD NOT WORK VERY WELL: Needs Validation Data
+                cur_score = model.score(X_test, y_test_bin)
+                if cur_score - self.tol > best_score:
+                    best_score = cur_score
+                    n_no_improvement = 0
+                else:
+                    n_no_improvement += 1
+                    if n_no_improvement >= self.n_iter_no_change:
+                        break
+                                 
+            if self.shuffle:
+                sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+
+            # TODO: Learning Rate adjustments?
+
+        self._after_fit(model)
+        return self
