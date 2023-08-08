@@ -1,13 +1,13 @@
 import warnings
 import numpy as np
-from typing import Union, Iterable
+from typing import Union, Iterable, Optional
 import scanpy as sc
 import anndata as ad
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import class_weight
 
 
-Numeric = Union[int, float, np.number]
+numeric = Union[int, float, np.number]
 
 
 def restructure_y_to_bin(y_orig):
@@ -72,7 +72,7 @@ def restructure_X_to_bin(X_orig, n_thresholds):
     return X_bin
 
 
-def transform_labels(y: Iterable[Numeric]):
+def transform_labels(y: Iterable[numeric]):
     """
     Transforms a target vector, such that it contains successive labels starting at 0.
 
@@ -152,12 +152,12 @@ class Preprocessing(BaseEstimator, TransformerMixin):
                  smooth: bool = False,
                  smooth_knn: int = 10,
                  select_genes: str = "all",
-                 gene_list: Iterable | None = None,
+                 gene_list: Optional[Iterable] = None,
                  min_gene_mean: float = 0.1,
                  max_gene_mean: float = 3,
                  hvg_min_dispersion: float = 0.5,
                  hvg_max_dispersion: float = np.inf,
-                 hvg_n_top_genes: int | None = None):
+                 hvg_n_top_genes: Optional[int] = None):
         
         self.scale = scale
         self.log = log
@@ -189,7 +189,7 @@ class Preprocessing(BaseEstimator, TransformerMixin):
             self.gene_list = np.array(self.gene_list)
 
 
-    def fit_transform(self, adata: ad.AnnData, y: Iterable | None = None, **fit_params) -> ad.AnnData:
+    def fit_transform(self, adata: ad.AnnData, y: Optional[Iterable] = None, **fit_params) -> ad.AnnData:
         
         # filter genes by their minimum mean counts
         cell_thresh = np.ceil(0.01 * adata.n_obs)

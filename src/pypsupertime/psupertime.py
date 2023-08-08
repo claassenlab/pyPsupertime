@@ -5,7 +5,7 @@ from .parameter_search import RegularizationSearchCV
 import datetime
 import sys
 import warnings
-from typing import Iterable
+from typing import Iterable, Union
 
 import numpy as np
 from sklearn import metrics
@@ -57,7 +57,7 @@ class Psupertime:
         regularization_params["estimator"] = _model_class
         self.grid_search = RegularizationSearchCV(**regularization_params)
 
-    def run(self, adata: ad.AnnData | str, ordinal_data: Iterable | str):
+    def run(self, adata: Union[ad.AnnData, str], ordinal_data: Union[Iterable, str]):
         
         start_time = datetime.datetime.now()
 
