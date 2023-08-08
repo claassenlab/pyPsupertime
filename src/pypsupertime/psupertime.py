@@ -2,11 +2,13 @@ from .preprocessing import Preprocessing, transform_labels
 from .model import BatchSGDModel, BaselineSGDModel
 from .parameter_search import RegularizationSearchCV
 
+import datetime
 import sys
 import warnings
 from collections.abc import Iterable
 
 import numpy as np
+from sklearn import metrics
 import anndata as ad
 from scanpy import read_h5ad
 
@@ -57,6 +59,8 @@ class Psupertime:
 
     def run(self, adata: ad.AnnData | str, ordinal_data: Iterable | str):
         
+        start_time = datetime.datetime.now()
+
         # TODO: respect verbosity setting everywhere
 
         # Validate adata or load the filename
@@ -107,13 +111,16 @@ class Psupertime:
         print("Refit on all data", end="\r")
         self.model = self.grid_search.get_optimal_model("1se")
         self.model.fit(adata.X, adata.obs.ordinal_label)
-        acc = self.model.score(adata.X, adata.obs.ordinal_label)
+        acc = metrics.accuracy_score(self.model.predict(adata.X), adata.obs.ordinal_label)
         dof = np.count_nonzero(self.model.coef_)
-        print("Refit on all data: done. accuracy=%f.02 n_genes=%s" % (acc, dof))
+        print("Refit on all data: done. accuracy=%f.02, n_genes=%s" % (acc, dof))
 
         # Annotate the data
         self.model.predict_psuper(adata, inplace=True)
 
         # TODO: Produce plots automatically?
 
-        return adata
+        print("Total elapsed time: ", str(datetime.datetime.now() - start_time))
+        
+        # inplace
+        # return adata
