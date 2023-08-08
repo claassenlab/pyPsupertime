@@ -36,7 +36,7 @@ class Psupertime:
         if not isinstance(preprocessing_params, dict):
             raise ValueError("Parameter estimator_params is not of type dict. Received: ", preprocessing_params)
         
-        self.preprocesing = Preprocessing(**preprocessing_params)
+        self.preprocessing = Preprocessing(**preprocessing_params)
 
         # Validate estimator params and instantiate model
         if not isinstance(estimator_params, dict):
@@ -79,7 +79,7 @@ class Psupertime:
             if len(ordinal_data) != adata.n_obs:
                 raise ValueError("Parameter ordinal_data has invalid length. Expected: %s Received: %s" % (len(ordinal_data), len(adata.n_obs)))
 
-        adata["ordinal_label"] = transform_labels(ordinal_data)
+        adata.obs["ordinal_label"] = transform_labels(ordinal_data)
 
         if self.max_memory is not None:
             # TODO: Validate number 
@@ -95,12 +95,12 @@ class Psupertime:
         # Run Preprocessing
         print("Preprocessing", end="\r")
         adata = self.preprocessing.fit_transform(adata)
-        print("Preprocessing: done. n_genes=%s, n_cells=" % (adata.n_vars, adata.n_obs))
+        print("Preprocessing: done. n_genes=%s, n_cells=%s" % (adata.n_vars, adata.n_obs))
 
         # TODO: Test / Train split required? -> produce two index arrays, to avoid copying the data?
 
         # Run Grid Search
-        print("Grid Search CV: CPUs=%s, n_folds=" % (self.grid_search.n_jobs, self.grid_search.n_folds))
+        print("Grid Search CV: CPUs=%s, n_folds=%s" % (self.grid_search.n_jobs, self.grid_search.n_folds))
         self.grid_search.fit(adata.X, adata.obs.ordinal_label)
 
         # Refit Model on _all_ data
@@ -108,7 +108,7 @@ class Psupertime:
         opt_params = self.grid_search.get_optimal_parameters("1se")
         self.model = self.grid_search.estimator(**{**opt_params, **self.estimator_params})
         self.model.fit(adata.X, adata.obs.ordinal_label)
-        acc = self.model.score(adata.X, adata.obs.ordinal_time)
+        acc = self.model.score(adata.X, adata.obs.ordinal_label)
         dof = np.count_nonzero(self.model.coef_)
         print("Refit on all data: done. accuracy=%f.02 n_genes=%s" % (acc, dof), end="\r")
 
