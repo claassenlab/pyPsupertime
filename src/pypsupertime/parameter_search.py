@@ -1,5 +1,5 @@
 import numpy as np
-from collections.abc import Iterable
+from typing import Iterable
 from sklearn.model_selection import cross_validate
 from sklearn.base import BaseEstimator, clone
 from copy import copy

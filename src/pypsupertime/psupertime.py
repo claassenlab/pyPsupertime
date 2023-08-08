@@ -5,7 +5,7 @@ from .parameter_search import RegularizationSearchCV
 import datetime
 import sys
 import warnings
-from collections.abc import Iterable
+from typing import Iterable
 
 import numpy as np
 from sklearn import metrics

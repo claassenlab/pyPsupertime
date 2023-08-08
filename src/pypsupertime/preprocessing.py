@@ -1,7 +1,6 @@
 import warnings
 import numpy as np
-from typing import Union
-from collections.abc import Iterable
+from typing import Union, Iterable
 import scanpy as sc
 import anndata as ad
 from sklearn.base import BaseEstimator, TransformerMixin
