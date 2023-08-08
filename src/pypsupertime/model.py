@@ -215,7 +215,7 @@ class BatchSGDModel(PsupertimeBaseModel):
                  l1_ratio=0.75, 
                  fit_intercept=True, 
                  shuffle=True, 
-                 verbose=1, 
+                 verbose=0, 
                  epsilon=0.1, 
                  n_jobs=1, 
                  power_t=0.5, 

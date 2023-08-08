@@ -101,16 +101,15 @@ class Psupertime:
 
         # Run Grid Search
         print("Grid Search CV: CPUs=%s, n_folds=%s" % (self.grid_search.n_jobs, self.grid_search.n_folds))
-        self.grid_search.fit(adata.X, adata.obs.ordinal_label)
+        self.grid_search.fit(adata.X, adata.obs.ordinal_label, estimator_params=self.estimator_params)
 
         # Refit Model on _all_ data
         print("Refit on all data", end="\r")
-        opt_params = self.grid_search.get_optimal_parameters("1se")
-        self.model = self.grid_search.estimator(**{**opt_params, **self.estimator_params})
+        self.model = self.grid_search.get_optimal_model("1se")
         self.model.fit(adata.X, adata.obs.ordinal_label)
         acc = self.model.score(adata.X, adata.obs.ordinal_label)
         dof = np.count_nonzero(self.model.coef_)
-        print("Refit on all data: done. accuracy=%f.02 n_genes=%s" % (acc, dof), end="\r")
+        print("Refit on all data: done. accuracy=%f.02 n_genes=%s" % (acc, dof))
 
         # Annotate the data
         self.model.predict_psuper(adata, inplace=True)
