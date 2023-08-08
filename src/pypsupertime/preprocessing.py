@@ -1,10 +1,14 @@
 import warnings
 import numpy as np
+from typing import Union
 from collections.abc import Iterable
 import scanpy as sc
 import anndata as ad
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import class_weight
+
+
+Numeric = Union[int, float, np.number]
 
 
 def restructure_y_to_bin(y_orig):
@@ -69,33 +73,31 @@ def restructure_X_to_bin(X_orig, n_thresholds):
     return X_bin
 
 
-def transform_labels(y, labels=None):
+def transform_labels(y: Iterable[Numeric]):
     """
     Transforms a target vector, such that it contains successive labels starting at 0.
 
-    :param y: iterable containing the labels of a dataset
-    :type y: Iterable
-    :param labels: Set of unique labels in the dataset. By default, np.unique will be called on y.
-    :type labels: Iterable, optional
+    :param y: Iterable containing the ordinal labels of a dataset. Note: Must be number (int, float, np.number)!
+    :type y: Iterable[number]
     :return: Numpy array with the labels converted
     :rtype: numpy.array
     """
 
-    # if labels are not given, compute
-    if labels is None: 
-        labels = np.unique(y)
-    
-    # convert the labels to numeric 
+    # convert to numeric 
     try:
-        labels = np.array(labels).astype("int")
+        y = np.array(y).astype("float32")
     except ValueError as e:
         print(e)
         raise ValueError("Error Converting labels to numeric values")
 
-    transf_table = dict(zip(np.sort(labels),
-                            np.arange(0, len(labels))))
+    labels = np.unique(y)
+    ordering = labels.argsort()
+    y_trans = np.zeros_like(y)
+    for i, el in enumerate(y):
+        for l, o in zip(labels, ordering):
+            if el == l:
+                y_trans[i] = o
 
-    y_trans = np.array([transf_table[e] for e in y])
     return y_trans
 
 
