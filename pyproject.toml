@@ -3,12 +3,12 @@ requires = ["flit_core>=3.2"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "psupertime"
-version = "0.0.32"
+name = "pypsupertime"
+version = "0.0.99"
 authors = [
-  { name="Julian Flesch", email="julian.fleschr@student.uni-tuebingen.de" },
+  { name="Julian Flesch", email="julian.flesch@student.uni-tuebingen.de" },
 ]
-description = "Psupertime"
+description = "PyPsupertime"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
