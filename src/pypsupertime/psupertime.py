@@ -4,9 +4,10 @@ from .parameter_search import RegularizationSearchCV
 
 import sys
 import warnings
+from collections.abc import Iterable
+
 import numpy as np
 import anndata as ad
-from abc import Iterable
 from scanpy import read_h5ad
 
 
@@ -16,7 +17,6 @@ class Psupertime:
                  max_memory=None,
                  n_folds=5,
                  n_jobs=5,
-                 test_split=0.1,
                  n_batches=1,
                  verbosity=1,
                  regularization_params=dict(),
@@ -28,7 +28,6 @@ class Psupertime:
         # grid search params
         self.n_jobs = n_jobs
         self.n_folds = n_folds
-        self.test_split = test_split
         
         # model params
         self.max_memory = max_memory
@@ -53,7 +52,6 @@ class Psupertime:
         _model_class = BatchSGDModel
         regularization_params["n_jobs"] = regularization_params.get("n_jobs", self.n_jobs)
         regularization_params["n_folds"] = regularization_params.get("n_folds", self.n_folds)
-        regularization_params["test_split"] = regularization_params.get("test_split", self.test_split)
         regularization_params["estimator"] = _model_class
         self.grid_search = RegularizationSearchCV(**regularization_params)
 
@@ -72,7 +70,7 @@ class Psupertime:
         # Validate the ordinal data
         if isinstance(ordinal_data, str):
             column_name = ordinal_data
-            if not adata.obs.get(column_name, False):
+            if column_name not in adata.obs.columns:
                 raise ValueError("Parameter ordinal_data is not a valid column in adata.obs. Received: ", ordinal_data)
 
             ordinal_data = adata.obs.get(column_name)
