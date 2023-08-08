@@ -107,7 +107,8 @@ class Psupertime:
 
         # Refit Model on _all_ data
         print("Refit on all data", end="\r")
-        self.model = self.grid_search.get_optimal_model("1se")
+        opt_params = self.grid_search.get_optimal_parameters("1se")
+        self.model = self.grid_search.estimator(**{**opt_params, **self.estimator_params})
         self.model.fit(adata.X, adata.obs.ordinal_label)
         acc = self.model.score(adata.X, adata.obs.ordinal_time)
         dof = np.count_nonzero(self.model.coef_)
