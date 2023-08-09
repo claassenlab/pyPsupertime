@@ -4,6 +4,7 @@ from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import SGDClassifier
 from sklearn import metrics
+from scipy import sparse
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -282,32 +283,52 @@ class BatchSGDModel(PsupertimeBaseModel):
         X, y = self._before_fit(X, y)
 
         if self.early_stopping:
+            # TODO: This is a full copy of the input data -> split an index array instead and work with slices?
             X, X_test, y, y_test = train_test_split(X, y, test_size=0.1, stratify=y, random_state=rng.integers(9999))
+            
+            # TODO: initializing binarized matrices for testing can be significant memory sink!
             y_test = restructure_y_to_bin(y_test)
             X_test = restructure_X_to_bin(X_test, self.k_)
+        
+        # diagonal matrix, to construct the binarized X per batch
+        thresholds = np.identity(self.k_)
+        if sparse.issparse(X):
+            thresholds = sparse.crs_matrix(thresholds)
 
         model = self.get_binary_estimator()
-        thresholds = np.identity(self.k_)
         n = X.shape[0]
+
+        # binarize only the labels already
         y_bin = restructure_y_to_bin(y)
+        
+        # 
         sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
 
-        cur_iter = 0
+        # iterations over all data
+        epoch = 0
+
+        # tracking previous scores for early stopping
         best_score = - np.inf
         n_no_improvement = 0
-        while cur_iter < self.max_iter:
 
-            cur_iter += 1
+        while epoch < self.max_iter:
+
+            epoch += 1
 
             start = 0
             for i in range(1, self.n_batches+1):
                 end = (i * len(y_bin) // self.n_batches)
-                idx = sampled_indices[start:end]
-                idx_mod_n = idx % n
-                X_batch = np.concatenate((X[idx_mod_n,:], thresholds[idx // n]), axis=1)
-                y_batch = y_bin[idx]
+                batch_idx = sampled_indices[start:end]
+                batch_idx_mod_n = batch_idx % n
+                
+                if sparse.issparse(X):
+                    X_batch = sparse.hstack((X[batch_idx_mod_n], thresholds[batch_idx // n]))
+                else:
+                    X_batch = np.hstack((X[batch_idx_mod_n,:], thresholds[batch_idx // n]))
+                
+                y_batch = y_bin[batch_idx]
                 start = end
-                weights = np.array(sample_weight)[idx_mod_n] if sample_weight is not None else None
+                weights = np.array(sample_weight)[batch_idx_mod_n] if sample_weight is not None else None
                 model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
 
             # Early stopping using the test data 
