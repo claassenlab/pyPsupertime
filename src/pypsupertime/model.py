@@ -202,6 +202,7 @@ class BaselineSGDModel(PsupertimeBaseModel):
 class BatchSGDModel(PsupertimeBaseModel):
 
     def __init__(self,
+                 early_stopping_batches=False,
                  n_batches=1,
                  max_iter=1000, 
                  random_state=1234, 
@@ -248,6 +249,7 @@ class BatchSGDModel(PsupertimeBaseModel):
         self.n_iter_no_change = n_iter_no_change
         self.tol = tol
         self.n_batches = n_batches
+        self.early_stopping_batches = early_stopping_batches
 
         # data attributes
         self.k_ = None
@@ -287,8 +289,15 @@ class BatchSGDModel(PsupertimeBaseModel):
             X, X_test, y, y_test = train_test_split(X, y, test_size=0.1, stratify=y, random_state=rng.integers(9999))
             
             # TODO: initializing binarized matrices for testing can be significant memory sink!
-            y_test = restructure_y_to_bin(y_test)
-            X_test = restructure_X_to_bin(X_test, self.k_)
+            y_test_bin = restructure_y_to_bin(y_test)
+            del(y_test)
+
+            if self.early_stopping_batches:
+                n_test = X_test.shape[0]
+                test_indices = np.arange(len(y_test_bin))
+            else:
+                X_test_bin = restructure_X_to_bin(X_test, self.k_)
+                del(X_test)
         
         # diagonal matrix, to construct the binarized X per batch
         thresholds = np.identity(self.k_)
@@ -301,7 +310,7 @@ class BatchSGDModel(PsupertimeBaseModel):
         # binarize only the labels already
         y_bin = restructure_y_to_bin(y)
         
-        # 
+        # create an inex array and shuffle
         sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
 
         # iterations over all data
@@ -333,13 +342,36 @@ class BatchSGDModel(PsupertimeBaseModel):
 
             # Early stopping using the test data 
             if self.early_stopping:
-                cur_score = model.score(X_test, y_test)
+                
+                if self.early_stopping_batches:
+                    # build test data in batches as needed to avoid keeping in memory
+                    scores = []
+                    start = 0
+                    for i in range(1, self.n_batches+1):
+                        end = (i * len(y_test_bin) // self.n_batches)
+                        batch_idx = test_indices[start:end]
+                        batch_idx_mod_n = batch_idx % n_test
+                        if sparse.issparse(X_test):
+                            X_test_batch = sparse.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
+                        else:
+                            X_test_batch = np.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
+                        
+                        scores.append(metrics.accuracy_score(model.predict(X_test_batch), y_test_bin[batch_idx]))
+                        start = end          
+                        
+                    cur_score = np.mean(scores)
+                
+                else:
+                    cur_score = model.score(X_test_bin, y_test_bin)
+
                 if cur_score - self.tol > best_score:
                     best_score = cur_score
                     n_no_improvement = 0
                 else:
                     n_no_improvement += 1
                     if n_no_improvement >= self.n_iter_no_change:
+                        # TODO: Remove debug output
+                        print("Stopped early at epoch ", epoch)
                         break
 
             if self.shuffle:
