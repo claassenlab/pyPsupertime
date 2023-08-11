@@ -281,108 +281,103 @@ class BatchSGDModel(PsupertimeBaseModel):
 
     def fit(self, X, y, sample_weight=None):
 
-        if self.n_batches == 1:
-            super().fit(X, y, sample_weight)
-            return self
+        rng = np.random.default_rng(self.random_state)
+        X, y = self._before_fit(X, y)
+
+        if self.early_stopping:
+            # TODO: This is a full copy of the input data -> split an index array instead and work with slices?
+            X, X_test, y, y_test = train_test_split(X, y, test_size=self.validation_fraction, stratify=y, random_state=rng.integers(9999))
+            
+            # TODO: initializing binarized matrices for testing can be significant memory sink!
+            y_test_bin = restructure_y_to_bin(y_test)
+            del(y_test)
+
+            if self.early_stopping_batches:
+                n_test = X_test.shape[0]
+                test_indices = np.arange(len(y_test_bin))
+            else:
+                X_test_bin = restructure_X_to_bin(X_test, self.k_)
+                del(X_test)
         
-        else:
-            rng = np.random.default_rng(self.random_state)
-            X, y = self._before_fit(X, y)
+        # diagonal matrix, to construct the binarized X per batch
+        thresholds = np.identity(self.k_)
+        if sparse.issparse(X):
+            thresholds = sparse.crs_matrix(thresholds)
 
-            if self.early_stopping:
-                # TODO: This is a full copy of the input data -> split an index array instead and work with slices?
-                X, X_test, y, y_test = train_test_split(X, y, test_size=self.validation_fraction, stratify=y, random_state=rng.integers(9999))
+        model = self.get_binary_estimator()
+        n = X.shape[0]
+
+        # binarize only the labels already
+        y_bin = restructure_y_to_bin(y)
+        
+        # create an inex array and shuffle
+        sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+
+        # iterations over all data
+        epoch = 0
+
+        # tracking previous scores for early stopping
+        best_score = - np.inf
+        n_no_improvement = 0
+
+        while epoch < self.max_iter:
+
+            epoch += 1
+
+            start = 0
+            for i in range(1, self.n_batches+1):
+                end = (i * len(y_bin) // self.n_batches)
+                batch_idx = sampled_indices[start:end]
+                batch_idx_mod_n = batch_idx % n
                 
-                # TODO: initializing binarized matrices for testing can be significant memory sink!
-                y_test_bin = restructure_y_to_bin(y_test)
-                del(y_test)
-
-                if self.early_stopping_batches:
-                    n_test = X_test.shape[0]
-                    test_indices = np.arange(len(y_test_bin))
+                if sparse.issparse(X):
+                    X_batch = sparse.hstack((X[batch_idx_mod_n], thresholds[batch_idx // n]))
                 else:
-                    X_test_bin = restructure_X_to_bin(X_test, self.k_)
-                    del(X_test)
-            
-            # diagonal matrix, to construct the binarized X per batch
-            thresholds = np.identity(self.k_)
-            if sparse.issparse(X):
-                thresholds = sparse.crs_matrix(thresholds)
+                    X_batch = np.hstack((X[batch_idx_mod_n,:], thresholds[batch_idx // n]))
+                
+                y_batch = y_bin[batch_idx]
+                start = end
+                weights = np.array(sample_weight)[batch_idx_mod_n] if sample_weight is not None else None
+                model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
 
-            model = self.get_binary_estimator()
-            n = X.shape[0]
+            # Early stopping using the test data 
+            if self.early_stopping:
 
-            # binarize only the labels already
-            y_bin = restructure_y_to_bin(y)
-            
-            # create an inex array and shuffle
-            sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+                # build test data in batches as needed to avoid keeping in memory
+                if self.early_stopping_batches:
+                    scores = []
+                    start = 0
+                    for i in range(1, self.n_batches+1):
+                        end = (i * len(y_test_bin) // self.n_batches)
+                        batch_idx = test_indices[start:end]
+                        batch_idx_mod_n = batch_idx % n_test
+                        if sparse.issparse(X_test):
+                            X_test_batch = sparse.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
+                        else:
+                            X_test_batch = np.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
+                        
+                        scores.append(model.score(X_test_batch, y_test_bin[batch_idx]))
+                        start = end          
+                        
+                    cur_score = np.mean(scores)
+                
+                else:
+                    cur_score = model.score(X_test_bin, y_test_bin)
 
-            # iterations over all data
-            epoch = 0
+                if cur_score - self.tol > best_score:
+                    best_score = cur_score
+                    n_no_improvement = 0
+                else:
+                    n_no_improvement += 1
+                    if n_no_improvement >= self.n_iter_no_change:
+                        # TODO: Remove debug output
+                        print("Stopped early at epoch ", epoch)
+                        break
 
-            # tracking previous scores for early stopping
-            best_score = - np.inf
-            n_no_improvement = 0
+            if self.shuffle:
+                sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
 
-            while epoch < self.max_iter:
+            # TODO: Learning Rate adjustments?
 
-                epoch += 1
-
-                start = 0
-                for i in range(1, self.n_batches+1):
-                    end = (i * len(y_bin) // self.n_batches)
-                    batch_idx = sampled_indices[start:end]
-                    batch_idx_mod_n = batch_idx % n
-                    
-                    if sparse.issparse(X):
-                        X_batch = sparse.hstack((X[batch_idx_mod_n], thresholds[batch_idx // n]))
-                    else:
-                        X_batch = np.hstack((X[batch_idx_mod_n,:], thresholds[batch_idx // n]))
-                    
-                    y_batch = y_bin[batch_idx]
-                    start = end
-                    weights = np.array(sample_weight)[batch_idx_mod_n] if sample_weight is not None else None
-                    model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
-
-                # Early stopping using the test data 
-                if self.early_stopping:
-
-                    # build test data in batches as needed to avoid keeping in memory
-                    if self.early_stopping_batches:
-                        scores = []
-                        start = 0
-                        for i in range(1, self.n_batches+1):
-                            end = (i * len(y_test_bin) // self.n_batches)
-                            batch_idx = test_indices[start:end]
-                            batch_idx_mod_n = batch_idx % n_test
-                            if sparse.issparse(X_test):
-                                X_test_batch = sparse.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
-                            else:
-                                X_test_batch = np.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
-                            
-                            scores.append(model.score(X_test_batch, y_test_bin[batch_idx]))
-                            start = end          
-                            
-                        cur_score = np.mean(scores)
-                    
-                    else:
-                        cur_score = model.score(X_test_bin, y_test_bin)
-
-                    if cur_score - self.tol > best_score:
-                        best_score = cur_score
-                        n_no_improvement = 0
-                    else:
-                        n_no_improvement += 1
-                        if n_no_improvement >= self.n_iter_no_change:
-                            # TODO: Remove debug output
-                            print("Stopped early at epoch ", epoch)
-                            break
-
-                if self.shuffle:
-                    sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
-
-                # TODO: Learning Rate adjustments?
-
-            self._after_fit(model)
-            return self
+        self._after_fit(model)
+        return self
