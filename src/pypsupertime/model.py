@@ -291,7 +291,7 @@ class BatchSGDModel(PsupertimeBaseModel):
 
             if self.early_stopping:
                 # TODO: This is a full copy of the input data -> split an index array instead and work with slices?
-                X, X_test, y, y_test = train_test_split(X, y, test_size=0.1, stratify=y, random_state=rng.integers(9999))
+                X, X_test, y, y_test = train_test_split(X, y, test_size=self.validation_fraction, stratify=y, random_state=rng.integers(9999))
                 
                 # TODO: initializing binarized matrices for testing can be significant memory sink!
                 y_test_bin = restructure_y_to_bin(y_test)
@@ -361,7 +361,7 @@ class BatchSGDModel(PsupertimeBaseModel):
                             else:
                                 X_test_batch = np.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
                             
-                            scores.append(metrics.accuracy_score(model.predict(X_test_batch), y_test_bin[batch_idx]))
+                            scores.append(model.score(X_test_batch, y_test_bin[batch_idx]))
                             start = end          
                             
                         cur_score = np.mean(scores)
