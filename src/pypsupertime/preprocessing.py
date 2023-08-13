@@ -40,36 +40,30 @@ def restructure_y_to_bin(y_orig):
 def restructure_X_to_bin(X_orig, n_thresholds):
     """
     The count matrix is extended with copies of itself, to fit the converted label
-    vector FOR NOW. For big problems, it could suffice to have just one label 
+    vector. For big problems, it could suffice to have just one label 
     vector and perform and iterative training.
     To train the thresholds, $k$ columns are added to the count matrix and 
     initialized to zero. Each column column represents the threshold for a 
     label $l_i$ and is set to 1, exactly  where that label $l_1$ occurs.
 
     :param X_orig: input data
-    :type X_orig: numpy array with shape (n_cells, n_genes)
+    :type X_orig: numpy array or sparse.csr_matrix with shape (n_cells, n_genes)
     :param n_thresholds: number of thresholds to be learned - equal to num_unique_labels - 1
     :type n_thresholds: integer
     :return: Restructured matrix of shape (n_cells * n_thresholds, n_genes + n_thresholds)
     :rtype: numpy array
     """
 
-    # TODO: Build Sparse binarized matrices
-
-    # X training matrix
-    X_bin = np.concatenate([X_orig.copy()] * (n_thresholds))
-    # Add thresholds
-    num_el = X_orig.shape[0] * (n_thresholds)
-
-    for ki in range(n_thresholds):
-        temp = np.repeat(0, num_el).reshape(X_orig.shape[0], (n_thresholds))
-        temp[:,ki] = 1
-        if ki > 0:
-            thresholds = np.concatenate([thresholds, temp])
-        else:
-            thresholds = temp
-
-    X_bin = np.concatenate([X_bin, thresholds], axis=1)
+    n = X_orig.shape[0]
+    binarized_index = np.arange(n * n_thresholds)
+    index_mod_n = binarized_index % n
+    thresholds = np.identity(n_thresholds)
+    
+    if sparse.issparse(X_orig):
+        thresholds = sparse.csr_matrix(thresholds)
+        X_bin = sparse.hstack((X_orig[index_mod_n], thresholds[binarized_index // n]))
+    else:
+        X_bin = np.hstack((X_orig[index_mod_n], thresholds[binarized_index // n]))
 
     return X_bin
 
