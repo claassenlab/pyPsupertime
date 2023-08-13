@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "pypsupertime"
-version = "0.0.109"
+version = "0.0.110"
 authors = [
   { name="Julian Flesch", email="julian.flesch@student.uni-tuebingen.de" },
 ]
@@ -20,8 +20,10 @@ dependencies=[
   "numpy",
   "matplotlib",
   "seaborn",
-  "sklearn",
+  "scikit-learn",
+  "scipy",
   "scanpy",
+  "anndata",
 ]
 
 [tool.setuptools.package-data]
