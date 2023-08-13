@@ -302,7 +302,7 @@ class BatchSGDModel(PsupertimeBaseModel):
         # diagonal matrix, to construct the binarized X per batch
         thresholds = np.identity(self.k_)
         if sparse.issparse(X):
-            thresholds = sparse.crs_matrix(thresholds)
+            thresholds = sparse.csr_matrix(thresholds)
 
         model = self.get_binary_estimator()
         n = X.shape[0]
