@@ -42,7 +42,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         return self.binary_estimator_
 
     def _before_fit(self, data, targets):
-        data, targets = check_X_y(data, transform_labels(targets))
+        data, targets = check_X_y(data, transform_labels(targets), accept_sparse=True)
         self.classes_ = np.unique(targets)
         self.k_ = len(self.classes_) - 1
         return data, targets
