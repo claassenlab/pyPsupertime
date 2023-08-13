@@ -217,7 +217,7 @@ class BatchSGDModel(PsupertimeBaseModel):
                  l1_ratio=0.75, 
                  fit_intercept=True, 
                  shuffle=True, 
-                 verbose=0, 
+                 verbosity=0, 
                  epsilon=0.1, 
                  n_jobs=1, 
                  power_t=0.5, 
@@ -237,7 +237,7 @@ class BatchSGDModel(PsupertimeBaseModel):
         self.l1_ratio = l1_ratio
         self.fit_intercept = fit_intercept
         self.shuffle = shuffle
-        self.verbose = verbose
+        self.verbosity = verbosity
         self.epsilon = epsilon
         self.n_jobs = n_jobs
         self.power_t = power_t
@@ -267,7 +267,7 @@ class BatchSGDModel(PsupertimeBaseModel):
                             l1_ratio = self.l1_ratio,
                             fit_intercept = self.fit_intercept,
                             shuffle = self.shuffle,
-                            verbose = self.verbose,
+                            verbose = self.verbosity >= 3,
                             epsilon = self.epsilon,
                             n_jobs = self.n_jobs,
                             power_t = self.power_t,
@@ -370,8 +370,8 @@ class BatchSGDModel(PsupertimeBaseModel):
                 else:
                     n_no_improvement += 1
                     if n_no_improvement >= self.n_iter_no_change:
-                        # TODO: Remove debug output
-                        print("Stopped early at epoch ", epoch)
+                        if self.verbosity >= 2:
+                            print("Stopped early at epoch ", epoch, " Current score:", cur_score)
                         break
 
             if self.shuffle:

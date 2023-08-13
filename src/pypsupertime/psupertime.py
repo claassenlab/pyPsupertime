@@ -12,7 +12,6 @@ from sklearn import metrics
 import anndata as ad
 from scanpy import read_h5ad
 
-
 class Psupertime:
 
     def __init__(self,

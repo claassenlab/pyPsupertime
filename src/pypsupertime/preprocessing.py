@@ -5,7 +5,7 @@ import scanpy as sc
 import anndata as ad
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import class_weight
-
+from scipy import sparse
 
 numeric = Union[int, float, np.number]
 
@@ -53,6 +53,8 @@ def restructure_X_to_bin(X_orig, n_thresholds):
     :return: Restructured matrix of shape (n_cells * n_thresholds, n_genes + n_thresholds)
     :rtype: numpy array
     """
+
+    # TODO: Build Sparse binarized matrices
 
     # X training matrix
     X_bin = np.concatenate([X_orig.copy()] * (n_thresholds))
