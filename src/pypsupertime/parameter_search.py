@@ -10,7 +10,7 @@ class RegularizationSearchCV:
 
     def __init__(self, 
                  estimator: BaseEstimator, 
-                 scoring=None, 
+                 scoring="accuracy", 
                  reg_param_name="regularization", 
                  reg_path=None, 
                  n_params=40, 
@@ -25,10 +25,10 @@ class RegularizationSearchCV:
         self.n_jobs = n_jobs
         self.n_folds = n_folds
 
-        self.scoring = scoring  # for now, only use default scoring
+        self.scoring = scoring
         if not isinstance(scoring, str) and (isinstance(scoring, dict) or isinstance(scoring, Iterable)):
             warnings.warn("Parameter 'scoring' is a list or dict: Multiple scorers are currently not supported. Using the model default.")
-            self.scoring = None
+            self.scoring = "accuracy"
 
         if reg_path is None:
             self.reg_path = np.geomspace(reg_high, reg_low, n_params)
