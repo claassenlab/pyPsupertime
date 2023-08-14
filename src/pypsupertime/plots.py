@@ -106,10 +106,10 @@ def plot_model_perf(model: PsupertimeBaseModel, train: Tuple[Iterable, Iterable]
         X_train, y_train = train
         X_test, y_test = test
         
-        y_train_trans = transform_labels(y_train, labels=labels)
+        y_train_trans = transform_labels(y_train)
         weights_train = calculate_weights(y_train_trans)
 
-        y_test_trans = transform_labels(y_test, labels=labels)
+        y_test_trans = transform_labels(y_test)
         weights_test = calculate_weights(y_test_trans)
 
         print("Train:")
@@ -134,7 +134,7 @@ def plot_model_perf(model: PsupertimeBaseModel, train: Tuple[Iterable, Iterable]
     else:
         X, y = train
         labels = np.unique(y)
-        y_trans = transform_labels(y, labels=labels)
+        y_trans = transform_labels(y)
         weights = calculate_weights(y_trans)
 
         print("Accuracy:", metrics.accuracy_score(y_trans, model.predict(X)))
