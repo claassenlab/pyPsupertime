@@ -43,6 +43,7 @@ class Psupertime:
             warnings.warn("Parameter `max_memory` is currently not implemented. Try setting n_batches directly to control the memory usage.")
         self.n_batches = n_batches
         
+        # TODO: Implement preprocessing as Pipeline with GridSearch -> requires fit functions to take anndata.AnnData
         if not isinstance(preprocessing_params, dict):
             raise ValueError("Parameter estimator_params is not of type dict. Received: ", preprocessing_params)
         
@@ -104,17 +105,6 @@ class Psupertime:
                 raise ValueError("Parameter ordinal_data has invalid length. Expected: %s Received: %s" % (len(ordinal_data), len(adata.n_obs)))
 
         adata.obs["ordinal_label"] = transform_labels(ordinal_data)
-
-        if self.max_memory is not None:
-            # TODO: Validate number 
-            #   -> is it int?
-            #   -> Is it bigger than the object size?
-            
-            # TODO: Determine number of batches needed to keep memory usage below max_memory
-            bytes_per_gb = 1000000000
-            gb_size = sys.getsizeof(adata) / bytes_per_gb
-
-            raise NotImplementedError("Max Memory cannot be set currently")
 
         # Run Preprocessing
         print("Preprocessing", end="\r")
