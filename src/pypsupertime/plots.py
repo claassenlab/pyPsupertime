@@ -8,9 +8,10 @@ import anndata as ad
 import pandas as pd
 from matplotlib import pyplot as plt
 import warnings
+from typing import Optional, Tuple, Iterable
 
 
-def plot_grid_search(grid_search: RegularizationSearchCV, title="Grid Search Results", figsize=(16,4)):
+def plot_grid_search(grid_search: RegularizationSearchCV, title: str="Grid Search Results", figsize: Tuple[int, int]=(16,4), y_log_weights: bool=False):
     """Plot the weights, scores, and degrees of freedom for a parameter search as a function of the 
     regularization path. Indicates the best model and most sparse model within one standard error of the 
     best score based on the averaged cross validation scores. 
@@ -21,6 +22,8 @@ def plot_grid_search(grid_search: RegularizationSearchCV, title="Grid Search Res
     :type title: str, optional
     :param figsize: Size of the matplotlib figure, defaults to (16,4)
     :type figsize: tuple, optional
+    :param y_log_weights: log scale y axis of weights plot, defaults to False
+    :type y_log_weights: boolean
     :return: figure instance 
     :rtype: matplotlib.pyplot.Figure
     """
@@ -44,7 +47,7 @@ def plot_grid_search(grid_search: RegularizationSearchCV, title="Grid Search Res
     ax1.axvline(ose_idx, ymin=0, ymax=1, color="blue", label="1se", ls="--")
     ax1.set_xlabel("regularization iteration")
     ax1.set_ylabel("weights")
-    #ax1.set_yscale("log")
+    if y_log_weights: ax1.set_yscale("log")
     ax1.legend()
 
     ax3 = fig.add_subplot(132)
@@ -68,7 +71,7 @@ def plot_grid_search(grid_search: RegularizationSearchCV, title="Grid Search Res
     return fig
 
 
-def plot_model_perf(model, train, test, title="Model Predictions", figsize=(10, 4)):
+def plot_model_perf(model: PsupertimeBaseModel, train: Tuple[Iterable, Iterable], test: Optional[Tuple[Iterable, Iterable]]=None, title: str="Model Predictions", figsize: Tuple[int, int]=(10, 4)):
     """Print model performance statistics and plot the confusion matrices for the 
     test and training prediction, respectively.
 
@@ -77,7 +80,7 @@ def plot_model_perf(model, train, test, title="Model Predictions", figsize=(10, 
     :param train: X_train, y_train
     :type train: tuple
     :param test: X_test, y_test
-    :type test: tuple
+    :type test: tuple, optional
     :param title: Figure title, defaults to "Model Predictions"
     :type title: str, optional
     :param figsize: Size of the matplotlib figure, defaults to (16,4)
@@ -91,45 +94,66 @@ def plot_model_perf(model, train, test, title="Model Predictions", figsize=(10, 
     if not model.is_fitted_:
         raise ValueError("The grid_search must be run first! Did you call the `.fit()` method?")
     
-    if not isinstance(train, tuple) or not isinstance(test, tuple):
+    if not isinstance(train, tuple) or (test is not None and not isinstance(test, tuple)):
         raise ValueError("The parameters `train`, `test` are expected to be tuples of np.array")
-
-    X_test, y_test = test
-    X_train, y_train = train
-    labels = np.unique(np.concatenate([y_test, y_train]))
-    y_test_trans = transform_labels(y_test, labels=labels)
-    y_train_trans = transform_labels(y_train, labels=labels)
     
-    weights_train = calculate_weights(y_train_trans)
-    weights_test = calculate_weights(y_test_trans)
+    print("Model Degrees of freedom", np.count_nonzero(np.array(model.coef_).flatten()))
 
-    print("Degrees of freedom", np.count_nonzero(np.array(model.coef_).flatten()))
-    print("Train:")
-    print("Accuracy:", metrics.accuracy_score(y_train_trans, model.predict(X_train)))
-    print("Balanced accuracy:", metrics.balanced_accuracy_score(y_train_trans, model.predict(X_train)))
-    print("Mean absolute delta:", metrics.mean_absolute_error(y_train_trans, model.predict(X_train), sample_weight=weights_train))
-    print("Test:")
-    print("Accuracy:", metrics.accuracy_score(y_test_trans, model.predict(X_test)))
-    print("Balanced accuracy:", metrics.balanced_accuracy_score(y_test_trans, model.predict(X_test)))
-    print("Mean absolute delta:", metrics.mean_absolute_error(y_test_trans, model.predict(X_test), sample_weight=weights_test))
+    if test is not None:
 
-    fig = plt.figure(figsize=figsize)
-    ax1 = fig.add_subplot(121)
-    ax2 = fig.add_subplot(122)
+        labels = np.unique(np.concatenate([y_test, y_train]))
+        
+        X_train, y_train = train
+        X_test, y_test = test
+        
+        y_train_trans = transform_labels(y_train, labels=labels)
+        weights_train = calculate_weights(y_train_trans)
 
-    sns.heatmap(metrics.confusion_matrix(y_test_trans, model.predict(X_test)), annot=True, ax=ax1)
-    sns.heatmap(metrics.confusion_matrix(y_train_trans, model.predict(X_train)), annot=True, ax=ax2)
+        y_test_trans = transform_labels(y_test, labels=labels)
+        weights_test = calculate_weights(y_test_trans)
 
-    ax1.set_xlabel("Test-Split Preditions")
-    ax1.set_ylabel("Ground Truth Labels")
-    ax2.set_xlabel("Train-Split Predictions")
+        print("Train:")
+        print("Accuracy:", metrics.accuracy_score(y_train_trans, model.predict(X_train)))
+        print("Balanced accuracy:", metrics.balanced_accuracy_score(y_train_trans, model.predict(X_train)))
+        print("Mean absolute delta:", metrics.mean_absolute_error(y_train_trans, model.predict(X_train), sample_weight=weights_train))
+        print("Test:")
+        print("Accuracy:", metrics.accuracy_score(y_test_trans, model.predict(X_test)))
+        print("Balanced accuracy:", metrics.balanced_accuracy_score(y_test_trans, model.predict(X_test)))
+        print("Mean absolute delta:", metrics.mean_absolute_error(y_test_trans, model.predict(X_test), sample_weight=weights_test))
+            
+        fig = plt.figure(figsize=figsize)
+        ax1 = fig.add_subplot(121)
+        ax2 = fig.add_subplot(122)
+
+        sns.heatmap(metrics.confusion_matrix(y_test_trans, model.predict(X_test)), annot=True, ax=ax1)
+        sns.heatmap(metrics.confusion_matrix(y_train_trans, model.predict(X_train)), annot=True, ax=ax2)
+        ax1.set_xlabel("Test-Split Preditions")
+        ax1.set_ylabel("Ground Truth Labels")
+        ax2.set_xlabel("Train-Split Predictions")
+
+    else:
+        X, y = train
+        labels = np.unique(y)
+        y_trans = transform_labels(y, labels=labels)
+        weights = calculate_weights(y_trans)
+
+        print("Accuracy:", metrics.accuracy_score(y_trans, model.predict(X)))
+        print("Balanced accuracy:", metrics.balanced_accuracy_score(y_trans, model.predict(X)))
+        print("Mean absolute delta:", metrics.mean_absolute_error(y_trans, model.predict(X), sample_weight=weights))
+        
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot(111)
+        sns.heatmap(metrics.confusion_matrix(y_trans, model.predict(X)), annot=True, ax=ax)
+        ax.set_ylabel("Ground Truth Labels")
+        ax.set_xlabel("Predictions")
+
 
     fig.suptitle(title)
 
     return fig
 
 
-def plot_identified_gene_coefficients(model: PsupertimeBaseModel, anndata: ad.AnnData,  n_top=30, figsize=(6,6), *args, **kwargs):
+def plot_identified_gene_coefficients(model: PsupertimeBaseModel, anndata: ad.AnnData,  n_top: int=30, figsize: Tuple[int, int]=(6,6), *args, **kwargs):
     """Extracts gene weigts from model and plots the `n_top` highest gene coefficient sorted by their abs value
     as horizontal bars.
 
@@ -171,7 +195,7 @@ def plot_identified_genes_over_psupertime(n = 20, *args, **kwargs):
     raise NotImplementedError()
 
 
-def plot_labels_over_psupertime(model: PsupertimeBaseModel, anndata: ad.AnnData, label_key: str, figsize=(10, 5), *args, **kwargs) -> plt.Figure:
+def plot_labels_over_psupertime(model: PsupertimeBaseModel, anndata: ad.AnnData, label_key: str, figsize: Tuple[int, int]=(10, 5), *args, **kwargs) -> plt.Figure:
     """Distirbution of cells, grouped by their ordinal label as a function of the predicted pseudotime.
 
     :param model: fitted psupertime model
