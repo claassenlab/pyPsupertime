@@ -172,8 +172,10 @@ class Psupertime:
         return plot_identified_gene_coefficients(self.model, *args, **kwargs)
     
     def plot_identified_genes_over_psupertime(self, *args, **kwargs):
+        raise NotImplementedError()
         self.check_is_fitted(raise_error=True)
         return plot_identified_genes_over_psupertime(*args, **kwargs)
 
     def plot_labels_over_psupertime(self, *args, **kwargs):
         self.check_is_fitted(raise_error=True)
+        return plot_labels_over_psupertime(self.model, *args, **kwargs)
