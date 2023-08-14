@@ -213,7 +213,7 @@ def plot_labels_over_psupertime(model: PsupertimeBaseModel, anndata: ad.AnnData,
     if not isinstance(anndata, ad.AnnData):
         raise ValueError("anndata must be an instanec of anndat.AnnData")
     
-    if not anndata.obs.get(label_key, False):
+    if not hasattr(anndata.obs, label_key):
         raise ValueError("anndata.obs does not contain column with key '%s'" % label_key)
 
     if not isinstance(model, PsupertimeBaseModel):
