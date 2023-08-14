@@ -19,6 +19,30 @@ MAX_EXP = 709
 
 
 class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
+    """
+    Abstract Base class to build scikit-learn compatible models for PyPsupertime derived from `sklearn.base.BaseEstimator` and 
+    `sklearn.base.ClassifierMixin`.
+
+    Provides methods for restructuring ordinal data into a binary representation and 
+    for fitting a nested binary logistic classifier.
+    
+    Provides predict methods, that uses the fitted binary classifier to estimate the probabilities and labels of
+    the ordinal multiclass problem.
+
+    :ivar method: Statistical model used for ordinal logistic regression: One of `"proportional"`, `"forward"` 
+     and `"backward"`, corresponding to cumulative proportional odds, forward continuation ratio and
+     backward continuation ratio.
+    :type method: str 
+    :ivar binary_estimator_: sklearn model which is fitted on the ordinal binary logistic classification task
+    :type binary_estimator_: sklearn.base.ClassifierMixin
+    :ivar regularization: parmeter controlling the sparsity of the model. Wrapper for the respective parameter
+     of the nested `binary_estimator_`. Not necessary
+    :type regularization: float
+    :ivar k_: number of thresholds to be learned, equal to one less than the number of unique ordinal labels 
+    :type k_: int
+
+    """
+    method: str = "proportional"
     binary_estimator_: BaseEstimator = None
     regularization: float
     random_state: int = 1234
@@ -33,6 +57,12 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         raise NotImplementedError()
  
     def get_binary_estimator(self):
+        """Returns the nested binary model extending `sklearn.base.BaseEstimator`
+
+        :raises ValueError: _description_
+        :return: _description_
+        :rtype: _type_
+        """
         if self.binary_estimator_ is None:
             self.binary_estimator_  = self._binary_estimator_factory()
 
@@ -56,6 +86,17 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         self.coef_ = model.coef_[0, :-self.k_]   # weights
 
     def fit(self, data, targets, sample_weight=None):
+        """Template fit function for derived models.
+
+        :param data: 2d data
+        :type data: numpy or numpy.sparse matrix
+        :param targets: Array-like object with ordinal labels
+        :type targets: Iterable
+        :param sample_weight: label weights to be used for training and scoring, defaults to None
+        :type sample_weight: Iterable, optional
+        :return: fitted estimator
+        :rtype: PsupertimeBaseModel
+        """
         data, targets = self._before_fit(data, targets)
 
         # convert to binary problem
@@ -122,14 +163,13 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         else:
             return pd.DataFrame({"psupertime_weight": self.coef_},
                                 index=anndata.var.index.copy())
-        
-    def score(self, X, y, sample_weight=None):
-        pred = self.predict(X)
-        return metrics.mean_absolute_error(pred, y, sample_weight=sample_weight)
 
 
 class BaselineSGDModel(PsupertimeBaseModel):
-    
+    """
+    Vanilla SGDClassifier wrapper derived from `PsupertimeBaseModel`
+
+    """
     def __init__(self, 
                  max_iter=100, 
                  random_state=1234, 
@@ -201,7 +241,14 @@ class BaselineSGDModel(PsupertimeBaseModel):
 
 
 class BatchSGDModel(PsupertimeBaseModel):
-
+    """
+    BatchSGDModel is a classifier derived from `PsupertimBaseModel` that wraps an `SGDClassifier`
+    as logistic binary estimator.
+    
+    It overwrites the superclass `_binary_estimator_factory() and `fit()` methods. The latter is wrapping
+    the `SGDClassifier.partial_fit()` function to fit the model in batches for a reduced memory footprint.
+    
+    """
     def __init__(self,
                  early_stopping_batches=False,
                  n_batches=1,
@@ -281,7 +328,23 @@ class BatchSGDModel(PsupertimeBaseModel):
                             tol = self.tol)
 
     def fit(self, X, y, sample_weight=None):
+        """Fit ordinal logistic model. 
+        Multiclass data is converted to binarized representation and one weight per feature, 
+        as well as a threshold for each class is fitted with a binary logistic classifier.
 
+        Derived from a `sklearn.linear.SGDClassifier`, fitted in batches according to `self.n_batches` 
+        for reduced memory usage.
+        
+
+        :param X: Data as 2d-matrix
+        :type X: numpy.array or scipy.sparse
+        :param y: ordinal labels
+        :type y: Iterable
+        :param sample_weight: Label weights for fitting and scoring, defaults to None. Can be used for example for class balancing.
+        :type sample_weight: Iterable, optional
+        :return: fitted classifier
+        :rtype: BatchSGDModel
+        """
         rng = np.random.default_rng(self.random_state)
         X, y = self._before_fit(X, y)
 
