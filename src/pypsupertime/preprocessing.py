@@ -152,6 +152,61 @@ def smooth(adata, knn=10, inplace=True):
 
 
 class Preprocessing(BaseEstimator, TransformerMixin):
+    """
+    Preprocessing for anndata.AnnData instances that implements an 
+    [sklearn transformer](https://scikit-learn.org/stable/modules/generated/sklearn.base.TransformerMixin.html).
+    
+    The following steps are performed in that order:
+        1. Filtering of genes by minimum expression
+        2. Log+1 transformation
+        3. Selection of genes by one of the following flavors:
+            - high variability (seurat flavor),
+            - role as transcription factors,
+            - matching a list of user-selected IDs, or
+            - using all genes
+        4. Denoising by smoothing over k nearest neighbors
+        5. Normalization incorporating all genes
+        6. Scaling to unit variance and shiftig to mean zero
+    
+    Except for the filtering by minimum expression and selection of genes, steps can be skipped at will and for 
+    the best outcome it is recommended that the user performs their own preprocessing instead of relying on our recipe.
+    
+    The [scanpy](https://scanpy.readthedocs.io/en/stable/) package is used to perform each of the steps above.
+
+    :param log: Perform log transformation after adding 1 where counts are 0, defaults to False
+    :type log: bool, optional
+    :param scale: Scale to unit variance and shifting to mean zero, defaults to True
+    :type scale: bool, optional
+    :param normalize: Normalize over all counts, defaults to False
+    :type normalize: bool, optional
+    :param smooth: Smooth over nearest neighbor, defaults to False
+    :type smooth: bool, optional
+    :param smooth_knn: Number of neighbors to average over, if `smooth` is set to True. Defaults to 10
+    :type smooth_knn: int, optional
+    :param select_genes: Method of selecting genes. Must be one of
+        - `"all"`: use all genes. This is ssed by default, but is the most computationally expensive
+        - `"hvg"`: highly variable genes according to the seurat implementation
+        - `"tf_mouse"`: Use list of mouse transcription factors. Not implemented, yet
+        - `"tf_human"`: Use list of human transcription factors. Not implemented, yet
+        - `"list"`: Use a user-curated list.
+    :type select_genes: str, optional
+    :param gene_list: Iterable of user-selected genes, only used if `select_genes` equals `"list"`. Defaults to None
+    :type gene_list: Optional[Iterable], optional
+    :param min_gene_mean: Minimum average counts cutoff per gene, defaults to 0.01
+    :type min_gene_mean: float, optional
+    :param max_gene_mean: Maximum average counts cutoff per gene, defaults to 3. Note: Currently not used!
+    :type max_gene_mean: float, optional
+    :param hvg_min_dispersion: Miminum dispersion cutoff, only used if `select_genes` equals `"hvg"` 
+        and `hvg_n_top_genes` unequals `None`. Defaults to 0.5
+    :type hvg_min_dispersion: float, optional
+    :param hvg_max_dispersion: Maximum dispersion cutoff, only used if `select_genes` equals `"hvg"`
+        and `hvg_n_top_genes` unequals `None`. Defaults to np.inf
+    :type hvg_max_dispersion: float, optional
+    :param hvg_n_top_genes: Number of genes to select, only used if `select_genes` equals `"hvg"`. Defaults to None
+    :type hvg_n_top_genes: Optional[int], optional
+    :raises ValueError: _description_
+    :raises ValueError: _description_
+    """
 
     def __init__(self, 
                  log: bool = False,
@@ -166,61 +221,6 @@ class Preprocessing(BaseEstimator, TransformerMixin):
                  hvg_min_dispersion: float = 0.5,
                  hvg_max_dispersion: float = np.inf,
                  hvg_n_top_genes: Optional[int] = None):
-        """
-        Preprocessing for anndata.AnnData instances that implements an 
-        [sklearn transformer](https://scikit-learn.org/stable/modules/generated/sklearn.base.TransformerMixin.html).
-        
-        The following steps are performed in that order:
-            1. Filtering of genes by minimum expression
-            2. Log+1 transformation
-            3. Selection of genes by one of the following flavors:
-                - high variability (seurat flavor),
-                - role as transcription factors,
-                - matching a list of user-selected IDs, or
-                - using all genes
-            4. Denoising by smoothing over k nearest neighbors
-            5. Normalization incorporating all genes
-            6. Scaling to unit variance and shiftig to mean zero
-        
-        Except for the filtering by minimum expression and selection of genes, steps can be skipped at will and for 
-        the best outcome it is recommended that the user performs their own preprocessing instead of relying on our recipe.
-       
-        The [scanpy](https://scanpy.readthedocs.io/en/stable/) package is used to perform each of the steps above.
-
-        :param log: Perform log transformation after adding 1 where counts are 0, defaults to False
-        :type log: bool, optional
-        :param scale: Scale to unit variance and shifting to mean zero, defaults to True
-        :type scale: bool, optional
-        :param normalize: Normalize over all counts, defaults to False
-        :type normalize: bool, optional
-        :param smooth: Smooth over nearest neighbor, defaults to False
-        :type smooth: bool, optional
-        :param smooth_knn: Number of neighbors to average over, if `smooth` is set to True. Defaults to 10
-        :type smooth_knn: int, optional
-        :param select_genes: Method of selecting genes. Must be one of
-            - `"all"`: use all genes. This is ssed by default, but is the most computationally expensive
-            - `"hvg"`: highly variable genes according to the seurat implementation
-            - `"tf_mouse"`: Use list of mouse transcription factors. Not implemented, yet
-            - `"tf_human"`: Use list of human transcription factors. Not implemented, yet
-            - `"list"`: Use a user-curated list.
-        :type select_genes: str, optional
-        :param gene_list: Iterable of user-selected genes, only used if `select_genes` equals `"list"`. Defaults to None
-        :type gene_list: Optional[Iterable], optional
-        :param min_gene_mean: Minimum average counts cutoff per gene, defaults to 0.01
-        :type min_gene_mean: float, optional
-        :param max_gene_mean: Maximum average counts cutoff per gene, defaults to 3. Note: Currently not used!
-        :type max_gene_mean: float, optional
-        :param hvg_min_dispersion: Miminum dispersion cutoff, only used if `select_genes` equals `"hvg"` 
-         and `hvg_n_top_genes` unequals `None`. Defaults to 0.5
-        :type hvg_min_dispersion: float, optional
-        :param hvg_max_dispersion: Maximum dispersion cutoff, only used if `select_genes` equals `"hvg"`
-         and `hvg_n_top_genes` unequals `None`. Defaults to np.inf
-        :type hvg_max_dispersion: float, optional
-        :param hvg_n_top_genes: Number of genes to select, only used if `select_genes` equals `"hvg"`. Defaults to None
-        :type hvg_n_top_genes: Optional[int], optional
-        :raises ValueError: _description_
-        :raises ValueError: _description_
-        """
         
         self.scale = scale
         self.log = log
