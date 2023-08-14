@@ -27,7 +27,7 @@ class RegularizationSearchCV:
 
         self.scoring = scoring
         if not isinstance(scoring, str) and (isinstance(scoring, dict) or isinstance(scoring, Iterable)):
-            warnings.warn("Parameter 'scoring' is a list or dict: Multiple scorers are currently not supported. Using the model default.")
+            warnings.warn("Parameter 'scoring' is a list or dict: Multiple scorers are currently not supported. Using accuracy for now.")
             self.scoring = "accuracy"
 
         if reg_path is None:
