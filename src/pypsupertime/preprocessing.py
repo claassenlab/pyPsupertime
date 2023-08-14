@@ -115,7 +115,19 @@ def calculate_weights(y):
 
 
 def smooth(adata, knn=10, inplace=True):
+    """
+    Smoothes data by averaging over the k nearest neighbors as a denoising step.
 
+    :param adata: annotation data object with data in `adata.X` 
+    :type adata: anndata.AnnData
+    :param knn: number of nearest neighbors to smooth over, defaults to 10
+    :type knn: int, optional
+    :param inplace: Perform the smoothing on the original anndata object, overwriting the existing `adata.X`.
+      If set to False, a copy of `adata` is created, defaults to True
+    :type inplace: bool, optional
+    :return: annotation data instance 
+    :rtype: anndata.AnnData
+    """
     # corellate all cells
     cor_mat = np.corrcoef(adata.X)
 
@@ -149,11 +161,66 @@ class Preprocessing(BaseEstimator, TransformerMixin):
                  smooth_knn: int = 10,
                  select_genes: str = "all",
                  gene_list: Optional[Iterable] = None,
-                 min_gene_mean: float = 0.1,
+                 min_gene_mean: float = 0.01,
                  max_gene_mean: float = 3,
                  hvg_min_dispersion: float = 0.5,
                  hvg_max_dispersion: float = np.inf,
                  hvg_n_top_genes: Optional[int] = None):
+        """
+        Preprocessing for anndata.AnnData instances that implements an 
+        [sklearn transformer](https://scikit-learn.org/stable/modules/generated/sklearn.base.TransformerMixin.html).
+        
+        The following steps are performed in that order:
+            1. Filtering of genes by minimum expression
+            2. Log+1 transformation
+            3. Selection of genes by one of the following flavors:
+                - high variability (seurat flavor),
+                - role as transcription factors,
+                - matching a list of user-selected IDs, or
+                - using all genes
+            4. Denoising by smoothing over k nearest neighbors
+            5. Normalization incorporating all genes
+            6. Scaling to unit variance and shiftig to mean zero
+        
+        Except for the filtering by minimum expression and selection of genes, steps can be skipped at will and for 
+        the best outcome it is recommended that the user performs their own preprocessing instead of relying on our recipe.
+       
+        The [scanpy](https://scanpy.readthedocs.io/en/stable/) package is used to perform each of the steps above.
+
+        :param log: Perform log transformation after adding 1 where counts are 0, defaults to False
+        :type log: bool, optional
+        :param scale: Scale to unit variance and shifting to mean zero, defaults to True
+        :type scale: bool, optional
+        :param normalize: Normalize over all counts, defaults to False
+        :type normalize: bool, optional
+        :param smooth: Smooth over nearest neighbor, defaults to False
+        :type smooth: bool, optional
+        :param smooth_knn: Number of neighbors to average over, if `smooth` is set to True. Defaults to 10
+        :type smooth_knn: int, optional
+        :param select_genes: Method of selecting genes. Must be one of
+            - `"all"`: use all genes. This is ssed by default, but is the most computationally expensive
+            - `"hvg"`: highly variable genes according to the seurat implementation
+            - `"tf_mouse"`: Use list of mouse transcription factors. Not implemented, yet
+            - `"tf_human"`: Use list of human transcription factors. Not implemented, yet
+            - `"list"`: Use a user-curated list.
+        :type select_genes: str, optional
+        :param gene_list: Iterable of user-selected genes, only used if `select_genes` equals `"list"`. Defaults to None
+        :type gene_list: Optional[Iterable], optional
+        :param min_gene_mean: Minimum average counts cutoff per gene, defaults to 0.01
+        :type min_gene_mean: float, optional
+        :param max_gene_mean: Maximum average counts cutoff per gene, defaults to 3. Note: Currently not used!
+        :type max_gene_mean: float, optional
+        :param hvg_min_dispersion: Miminum dispersion cutoff, only used if `select_genes` equals `"hvg"` 
+         and `hvg_n_top_genes` unequals `None`. Defaults to 0.5
+        :type hvg_min_dispersion: float, optional
+        :param hvg_max_dispersion: Maximum dispersion cutoff, only used if `select_genes` equals `"hvg"`
+         and `hvg_n_top_genes` unequals `None`. Defaults to np.inf
+        :type hvg_max_dispersion: float, optional
+        :param hvg_n_top_genes: Number of genes to select, only used if `select_genes` equals `"hvg"`. Defaults to None
+        :type hvg_n_top_genes: Optional[int], optional
+        :raises ValueError: _description_
+        :raises ValueError: _description_
+        """
         
         self.scale = scale
         self.log = log
@@ -186,9 +253,22 @@ class Preprocessing(BaseEstimator, TransformerMixin):
 
 
     def fit_transform(self, adata: ad.AnnData, y: Optional[Iterable] = None, **fit_params) -> ad.AnnData:
-        
+        """Fits transformer to an instance of `anndata.Anndata` and returns a transformed version of it
+         with the user-selected preprocessing applied.
+
+         This transformer strictly works on anndata instances, which store data and labels in a single object.
+         The parameters `y` is therfor never used, but kept to comply with the sklearn standard.
+
+        :param adata: Annotation data instance to be transformed
+        :type adata: anndata.AnnData
+        :param y: Only described to conform with the ever used, defaults to None
+        :type y: Optional[Iterable], optional
+        :raises NotImplementedError: When `select_genes` is set to `tf_human` or `tf_mouse`
+        :return: Transformed AnnData
+        :rtype: anndata.AnnData
+        """
         # filter genes by their minimum mean counts
-        cell_thresh = np.ceil(0.01 * adata.n_obs)
+        cell_thresh = np.ceil(self.min_gene_mean * adata.n_obs)
         sc.pp.filter_genes(adata, min_cells=cell_thresh)
 
         # log transform: adata.X = log(adata.X + 1)
@@ -204,11 +284,11 @@ class Preprocessing(BaseEstimator, TransformerMixin):
         
         # select mouse transcription factors
         elif self.select_genes == "tf_mouse":
-            raise NotImplemented("select_genes='tf_mouse'")
+            raise NotImplementedError("select_genes='tf_mouse'")
 
         # select human transcription factors
         elif self.select_genes == "tf_human":
-            raise NotImplemented("select_genes='tf_human'")
+            raise NotImplementedError("select_genes='tf_human'")
 
         # select curated genes from list
         # TODO: Check for array
@@ -221,12 +301,11 @@ class Preprocessing(BaseEstimator, TransformerMixin):
 
         # smoothing over neighbors to denoise data
         if self.smooth:
-            raise NotImplementedError("Smoothing not working properly yet")
             adata = smooth(adata, knn=self.smooth_knn)
 
-        # normalize with total UMI count per cell
+        # normalize over all counts
         # this helps keep the parameters small
-        if self.normalize: sc.pp.normalize_per_cell(adata)
+        if self.normalize: sc.pp.normalize_total(adata)
 
         # scale to unit variance and shift to zero mean
         if self.scale: sc.pp.scale(adata)
