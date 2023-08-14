@@ -111,9 +111,10 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
             anndata.obs["predicted_label"] = predicted_labels
         
         else:
-            return pd.DataFrame({"psupertime": transform,
-                                 "predicted_label": predicted_labels},
-                                 index=anndata.obs.index.copy())
+            obs_copy = anndata.obs.copy()
+            obs_copy["psupertime"] = transform
+            obs_copy["predicted_label"] = predicted_labels
+            return obs_copy
     
     def gene_weights(self, anndata: ad.AnnData, inplace=True):
         if inplace:
