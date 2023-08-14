@@ -1,6 +1,11 @@
 from .preprocessing import Preprocessing, transform_labels
-from .model import BatchSGDModel, BaselineSGDModel
+from .model import BatchSGDModel, PsupertimeBaseModel
 from .parameter_search import RegularizationSearchCV
+from .plots import (plot_grid_search,
+                    plot_identified_gene_coefficients, 
+                    plot_labels_over_psupertime, 
+                    plot_model_perf, 
+                    plot_identified_genes_over_psupertime)
 
 import datetime
 import sys
@@ -12,6 +17,7 @@ from sklearn import metrics
 import anndata as ad
 from scanpy import read_h5ad
 
+
 class Psupertime:
 
     def __init__(self,
@@ -22,8 +28,9 @@ class Psupertime:
                  verbosity=1,
                  regularization_params=dict(),
                  preprocessing_params=dict(),
+                 estimator_class=BatchSGDModel,
                  estimator_params=dict()):
-        
+
         self.verbosity = verbosity
         
         # grid search params
@@ -32,6 +39,8 @@ class Psupertime:
         
         # model params
         self.max_memory = max_memory
+        if self.max_memory is not None:
+            warnings.warn("Parameter `max_memory` is currently not implemented. Try setting n_batches directly to control the memory usage.")
         self.n_batches = n_batches
         
         if not isinstance(preprocessing_params, dict):
@@ -47,15 +56,25 @@ class Psupertime:
         self.estimator_params["n_batches"] = self.n_batches
         self.model = None  # not fitted yet
 
+        if not issubclass(estimator_class, PsupertimeBaseModel):
+            raise ValueError("Parameter estimator_class does not inherit PsupertimeBaseModel. Received: ", estimator_class)
+
         if not isinstance(regularization_params, dict):
             raise ValueError("Parameter estimator_params is not of type dict. Received: ", regularization_params)
         
-        _model_class = BatchSGDModel
         regularization_params["n_jobs"] = regularization_params.get("n_jobs", self.n_jobs)
         regularization_params["n_folds"] = regularization_params.get("n_folds", self.n_folds)
-        regularization_params["estimator"] = _model_class
+        regularization_params["estimator"] = estimator_class
         self.grid_search = RegularizationSearchCV(**regularization_params)
 
+    def check_is_fitted(self, raise_error=False):
+        is_fitted = isinstance(self.model, PsupertimeBaseModel) and self.model.is_fitted_
+        
+        if raise_error and not is_fitted:
+            ValueError("Invalid estimator class or model not fitted yet. Did you call run() already?")
+        else:
+            return is_fitted
+    
     def run(self, adata: Union[ad.AnnData, str], ordinal_data: Union[Iterable, str]):
         
         start_time = datetime.datetime.now()
@@ -69,6 +88,8 @@ class Psupertime:
         
         elif not isinstance(adata, ad.AnnData):
             raise ValueError("Parameter adata must be a filename or anndata.AnnData object. Received: ", adata)
+
+        print("Input Data: n_genes=%s, n_cells=%s" % (adata.n_vars, adata.n_obs))
 
         # Validate the ordinal data
         if isinstance(ordinal_data, str):
@@ -98,7 +119,7 @@ class Psupertime:
         # Run Preprocessing
         print("Preprocessing", end="\r")
         adata = self.preprocessing.fit_transform(adata)
-        print("Preprocessing: done. n_genes=%s, n_cells=%s" % (adata.n_vars, adata.n_obs))
+        print("Preprocessing: done. mode='%s', n_genes=%s, n_cells=%s" % (self.preprocessing.select_genes, adata.n_vars, adata.n_obs))
 
         # TODO: Test / Train split required? -> produce two index arrays, to avoid copying the data?
 
@@ -117,9 +138,42 @@ class Psupertime:
         # Annotate the data
         self.model.predict_psuper(adata, inplace=True)
 
-        # TODO: Produce plots automatically?
-
+        self.is_fitted_ = True
         print("Total elapsed time: ", str(datetime.datetime.now() - start_time))
+
+        return adata
+    
+    def refit_and_predict(self, adata, *args, **kwargs):
+        self.check_is_fitted(raise_error=True)
+        print("Input Data: n_genes=%s, n_cells=%s" % (adata.n_vars, adata.n_obs))
+        print("Refit on all data", end="\r")
+        self.model = self.grid_search.get_optimal_model(*args, **kwargs)
+        self.model.fit(adata.X, adata.obs.ordinal_label)
+        acc = metrics.accuracy_score(self.model.predict(adata.X), adata.obs.ordinal_label)
+        dof = np.count_nonzero(self.model.coef_)
+        print("Refit on all data: done. accuracy=%f.02, n_genes=%s" % (acc, dof))
+
+        self.model.predict_psuper(adata, inplace=True)
+
+    def predict_psuper(self, *args, **kwargs):
+        self.check_is_fitted(raise_error=True)
+        return self.model.predict_psuper(*args, **kwargs)
+
+    def plot_grid_search(self, *args, **kwargs):
+        self.check_is_fitted(raise_error=True)
+        return plot_grid_search(self.grid_search, *args, kwargs)
         
-        # inplace
-        # return adata
+    def plot_model_perf(self, *args, **kwargs):
+        self.check_is_fitted(raise_error=True)
+        return plot_model_perf(self.model, *args, **kwargs)
+
+    def plot_identified_gene_coefficients(self, *args, **kwargs):
+        self.check_is_fitted(raise_error=True)
+        return plot_identified_gene_coefficients(self.model, *args, **kwargs)
+    
+    def plot_identified_genes_over_psupertime(self, *args, **kwargs):
+        self.check_is_fitted(raise_error=True)
+        return plot_identified_genes_over_psupertime(*args, **kwargs)
+
+    def plot_labels_over_psupertime(self, *args, **kwargs):
+        self.check_is_fitted(raise_error=True)
