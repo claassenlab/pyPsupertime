@@ -26,5 +26,10 @@ dependencies=[
   "anndata",
 ]
 
+[project.urls]
+"Source" = "https://github.com/claassenlab/PyPsupertime"
+"Bug Tracker" = "https://github.com/claassenlab/pyPsupertime/issues"
+"API Documentation" = "https://pypsupertime.readthedocs.io/en/latest/"
+
 [tool.setuptools.package-data]
 "mypkg.data"=[]
