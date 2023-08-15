@@ -151,7 +151,7 @@ class Psupertime:
 
     def plot_grid_search(self, *args, **kwargs):
         self.check_is_fitted(raise_error=True)
-        return plot_grid_search(self.grid_search, *args, kwargs)
+        return plot_grid_search(self.grid_search, *args, **kwargs)
         
     def plot_model_perf(self, *args, **kwargs):
         self.check_is_fitted(raise_error=True)
