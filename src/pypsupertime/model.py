@@ -170,7 +170,8 @@ class BaselineSGDModel(PsupertimeBaseModel):
     Vanilla SGDClassifier wrapper derived from `PsupertimeBaseModel`
 
     """
-    def __init__(self, 
+    def __init__(self,
+                 method="proportional",
                  max_iter=100, 
                  random_state=1234, 
                  regularization=0.01, 
@@ -192,6 +193,8 @@ class BaselineSGDModel(PsupertimeBaseModel):
                  class_weight=None,
                  warm_start=False,
                  average=False):
+        
+        self.method = method
 
         # SGD parameters
         self.eta0 = eta0
@@ -250,6 +253,7 @@ class BatchSGDModel(PsupertimeBaseModel):
     
     """
     def __init__(self,
+                 method="proportional",
                  early_stopping_batches=False,
                  n_batches=1,
                  max_iter=1000, 
@@ -273,6 +277,8 @@ class BatchSGDModel(PsupertimeBaseModel):
                  class_weight=None,
                  warm_start=False,
                  average=False):
+
+        self.method = method
 
         # model hyperparameters
         self.eta0 = eta0

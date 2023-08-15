@@ -21,6 +21,7 @@ from scanpy import read_h5ad
 class Psupertime:
 
     def __init__(self,
+                 method="proportional",
                  max_memory=None,
                  n_folds=5,
                  n_jobs=5,
@@ -32,7 +33,13 @@ class Psupertime:
                  estimator_params=dict()):
 
         self.verbosity = verbosity
-        
+
+        # statistical method   
+        method_options = {"all", "hvg", "tf_mouse", "tf_human", "list"}
+        self.method = method
+        if self.method not in method_options:
+            raise ValueError("Parameter method must be one of %s. Received: %s." % (method_options, self.method)) 
+    
         # grid search params
         self.n_jobs = n_jobs
         self.n_folds = n_folds
@@ -55,6 +62,7 @@ class Psupertime:
         
         self.estimator_params = estimator_params
         self.estimator_params["n_batches"] = self.n_batches
+        self.estimator_params["method"] = self.method
         self.model = None  # not fitted yet
 
         if not issubclass(estimator_class, PsupertimeBaseModel):
