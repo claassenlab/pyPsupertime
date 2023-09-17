@@ -122,7 +122,7 @@ class Psupertime:
         
         elif isinstance(ordinal_data, Iterable):
             if len(ordinal_data) != adata.n_obs:
-                raise ValueError("Parameter ordinal_data has invalid length. Expected: %s Received: %s" % (len(ordinal_data), len(adata.n_obs)))
+                raise ValueError("Parameter ordinal_data has invalid length. Expected: %s Received: %s" % (len(ordinal_data), adata.n_obs))
 
         adata.obs["ordinal_label"] = transform_labels(ordinal_data)
 
@@ -134,16 +134,15 @@ class Psupertime:
 
         # TODO: Test / Train split required? -> produce two index arrays, to avoid copying the data?
 
-        # Run Grid Search
-        print("Grid Search CV: CPUs=%s, n_folds=%s" % (self.grid_search.n_jobs, self.grid_search.n_folds))
-        
         # heuristic for setting reg_low based on the number of genes and cells in the data, if it has not been specified
         if not (self.regularization_params.get("n_params", False) 
                 or self.regularization_params.get("reg_low", False)
                 or self.regularization_params.get("reg_high", False)):
             self.regularization_params["reg_low"] = 0.1 if adata.n_obs > adata.n_vars else 0.0001
-
         self.grid_search = RegularizationSearchCV(**self.regularization_params)
+        
+        # Run Grid Search
+        print("Grid Search CV: CPUs=%s, n_folds=%s" % (self.grid_search.n_jobs, self.grid_search.n_folds))
         self.grid_search.fit(adata.X, adata.obs.ordinal_label, estimator_params=self.estimator_params)
 
         # Refit Model on _all_ data
