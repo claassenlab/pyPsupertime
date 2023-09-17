@@ -84,7 +84,7 @@ class Psupertime:
         else:
             return is_fitted
     
-    def run(self, adata: Union[ad.AnnData, str], ordinal_data: Union[Iterable, str]):
+    def run(self, adata: Union[ad.AnnData, str], ordinal_data: Union[Iterable, str], inplace=True):
         
         start_time = datetime.datetime.now()
 
@@ -95,7 +95,11 @@ class Psupertime:
             filename = adata
             adata = read_h5ad(filename)
         
-        elif not isinstance(adata, ad.AnnData):
+        elif isinstance(adata, ad.AnnData):
+            if not inplace:
+                adata = adata.copy()
+
+        else:
             raise ValueError("Parameter adata must be a filename or anndata.AnnData object. Received: ", adata)
 
         print("Input Data: n_genes=%s, n_cells=%s" % (adata.n_vars, adata.n_obs))
@@ -140,7 +144,8 @@ class Psupertime:
         self.is_fitted_ = True
         print("Total elapsed time: ", str(datetime.datetime.now() - start_time))
 
-        return adata
+        if not inplace:
+            return adata
     
     def refit_and_predict(self, adata, *args, **kwargs):
         self.check_is_fitted(raise_error=True)
