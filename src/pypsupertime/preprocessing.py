@@ -144,11 +144,13 @@ def smooth(adata, knn=10, inplace=True):
 
     imputed_mat = np.dot(avg_knn_mat, adata.X)
 
-    if not inplace:
+    if inplace:
+        adata.X = imputed_mat
+    
+    else:
         adata = adata.copy()
-
-    adata.X = imputed_mat
-    return adata
+        adata.X = imputed_mat
+        return adata
 
 
 class Preprocessing(BaseEstimator, TransformerMixin):
