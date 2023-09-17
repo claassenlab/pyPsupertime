@@ -97,6 +97,9 @@ Development Roadmap
 Changelog:
 ----------
 
+* Versions 1.1.1, 1.1.2, 1.1.3: 
+    - Bugfixes
+
 * Version 1.1.0: 
     - Add `preprocessing_class` parameter to enable using custom / no preprocessing
     - Adds heuristic for selecting the lowest regularization parameter when none is specified

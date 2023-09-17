@@ -313,7 +313,7 @@ class Preprocessing(BaseEstimator, TransformerMixin):
 
         # smoothing over neighbors to denoise data
         if self.smooth:
-            adata = smooth(adata, knn=self.smooth_knn)
+            smooth(adata, knn=self.smooth_knn, inplace=True)
 
         # normalize over all counts
         # this helps keep the parameters small
