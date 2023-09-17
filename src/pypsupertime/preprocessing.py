@@ -128,6 +128,11 @@ def smooth(adata, knn=10, inplace=True):
     :return: annotation data instance 
     :rtype: anndata.AnnData
     """
+
+    if sparse.issparse(adata.X):
+        warnings.warn("Smoothing requires conversion of input data to dense format. If n_obs is large, this can be very memory intensive!")
+        adata.X = np.array(adata.X.todense())
+
     # corellate all cells
     cor_mat = np.corrcoef(adata.X)
 
