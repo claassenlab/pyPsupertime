@@ -135,6 +135,7 @@ class Psupertime:
 
         # Annotate the data
         self.model.predict_psuper(adata, inplace=True)
+        self.model.gene_weights(adata, inplace=True)
 
         self.is_fitted_ = True
         print("Total elapsed time: ", str(datetime.datetime.now() - start_time))
