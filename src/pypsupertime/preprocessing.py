@@ -168,8 +168,8 @@ class Preprocessing(BaseEstimator, TransformerMixin):
     [sklearn transformer](https://scikit-learn.org/stable/modules/generated/sklearn.base.TransformerMixin.html).
     
     The following steps are performed in that order:
-        1. Filtering of genes by minimum expression
-        2. Log+1 transformation
+        1. Log+1 transformation
+        2. Filtering of genes by minimum expression
         3. Selection of genes by one of the following flavors:
             - high variability (seurat flavor),
             - role as transcription factors,
@@ -278,12 +278,13 @@ class Preprocessing(BaseEstimator, TransformerMixin):
         :return: Transformed AnnData
         :rtype: anndata.AnnData
         """
-        # filter genes by their minimum mean counts
-        cell_thresh = np.ceil(self.min_gene_mean * adata.n_obs)
-        sc.pp.filter_genes(adata, min_cells=cell_thresh)
 
         # log transform: adata.X = log(adata.X + 1)
         if self.log: sc.pp.log1p(adata, copy=False)
+
+        # filter genes by their minimum mean counts
+        cell_thresh = np.ceil(self.min_gene_mean * adata.n_obs)
+        sc.pp.filter_genes(adata, min_cells=cell_thresh)
 
         # select highly-variable genes
         if self.select_genes == "hvg":
