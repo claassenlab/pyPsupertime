@@ -140,7 +140,7 @@ def smooth(adata, knn=10, inplace=True):
 
     # calculate the neighborhood average
     avg_knn_mat = idx_mat / np.sum(idx_mat, axis=1, keepdims=True)
-    assert np.all(np.sum(avg_knn_mat, axis=1) == 1)
+    assert np.all(np.isclose(np.sum(avg_knn_mat, axis=1), 1))
 
     imputed_mat = np.dot(avg_knn_mat, adata.X)
 
