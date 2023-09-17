@@ -77,11 +77,11 @@ class Psupertime:
 
         if not isinstance(regularization_params, dict):
             raise ValueError("Parameter estimator_params is not of type dict. Received: ", regularization_params)
-        
-        regularization_params["n_jobs"] = regularization_params.get("n_jobs", self.n_jobs)
-        regularization_params["n_folds"] = regularization_params.get("n_folds", self.n_folds)
-        regularization_params["estimator"] = estimator_class
-        self.grid_search = RegularizationSearchCV(**regularization_params)
+
+        self.regularization_params = regularization_params 
+        self.regularization_params["n_jobs"] = regularization_params.get("n_jobs", self.n_jobs)
+        self.regularization_params["n_folds"] = regularization_params.get("n_folds", self.n_folds)
+        self.regularization_params["estimator"] = estimator_class
 
     def check_is_fitted(self, raise_error=False):
         is_fitted = isinstance(self.model, PsupertimeBaseModel) and self.model.is_fitted_
@@ -135,6 +135,14 @@ class Psupertime:
 
         # Run Grid Search
         print("Grid Search CV: CPUs=%s, n_folds=%s" % (self.grid_search.n_jobs, self.grid_search.n_folds))
+        
+        # heuristic for setting reg_low based on the number of genes and cells in the data, if it has not been specified
+        if not (self.regularization_params.get("n_params", False) 
+                or self.regularization_params.get("reg_low", False)
+                or self.regularization_params.get("reg_high", False)):
+            self.regularization_params["reg_low"] = 0.1 if adata.n_obs > adata.n_vars else 0.0001
+
+        self.grid_search = RegularizationSearchCV(**self.regularization_params)
         self.grid_search.fit(adata.X, adata.obs.ordinal_label, estimator_params=self.estimator_params)
 
         # Refit Model on _all_ data
