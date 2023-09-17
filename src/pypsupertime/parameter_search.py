@@ -125,7 +125,7 @@ class RegularizationSearchCV:
         it automatically retries with method "best".
         
 
-        :param method: Specify the method by which optimality is determined. Must be one of {"1se", "best", "index"} defaults to "1se"
+        :param method: Specify the method by which optimality is determined. Must be one of {"1se", "half_se", "best", "index"} defaults to "1se"
         :type method: str, optional
         :param index: Model at specific index that should be returned.
          Only if method="index" is selected, defaults to None
@@ -136,7 +136,7 @@ class RegularizationSearchCV:
         :rtype: tuple
         """
 
-        if not method in ["1se", "best", "index"]:
+        if not method in ["1se", "half_se", "best", "index"]:
             raise ValueError("The method parameter should be one of '1se' or 'best'")
 
         if method =="index":
@@ -148,7 +148,7 @@ class RegularizationSearchCV:
             idx = np.argmax(self.scores)
             return (self.reg_path[idx], idx)
             
-        if method == "1se":
+        if method in ["1se", "half_se"]:
             n = len(self.dof)
 
             # check the effect direction of the regularization parameter
@@ -157,7 +157,14 @@ class RegularizationSearchCV:
             # compute the threshold as the maximum score minus the standard error
             nonzero_idx = np.nonzero(self.dof)
             max_idx = np.argmax(self.scores)
-            thresh = self.scores[max_idx] - np.std(np.array(self.scores)[nonzero_idx])
+
+            if method == "1se":
+                tol = np.std(np.array(self.scores)[nonzero_idx])
+
+            else: # method == "half_se"
+                tol = 0.5 * np.std(np.array(self.scores)[nonzero_idx])
+
+            thresh = self.scores[max_idx] - tol
 
             if sparsity_increases_w_idx:
                 items = zip(self.scores, self.dof)
@@ -171,7 +178,7 @@ class RegularizationSearchCV:
                    (i == max_idx):
                     return (self.reg_path[i], i)
             
-            warnings.warn("No model for method '1se' with non-zero degrees of freedom could be found. Returning the best scoring model")
+            warnings.warn("No model for method '%s' with non-zero degrees of freedom could be found. Returning the best scoring model" % method)
             return self.get_optimal_regularization(method="best")
         
     def get_optimal_parameters(self, *args, **kwargs):
