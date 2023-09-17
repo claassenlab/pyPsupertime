@@ -138,10 +138,14 @@ def smooth(adata, knn=10, inplace=True):
 
     # calculate the ranks of cell correlations
     order_mat = np.argsort(cor_mat, axis=1)
+    del(cor_mat)  # Delete unnecessary copy
+    
     rank_mat = np.argsort(order_mat, axis=1)
+    del(order_mat) # Delete unnecessary copy
 
     # indicate the knn closest neighbours
     idx_mat = rank_mat <= knn
+    del(rank_mat) # Delete unnecessary copy
 
     # calculate the neighborhood average
     avg_knn_mat = idx_mat / np.sum(idx_mat, axis=1, keepdims=True)
