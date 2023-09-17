@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "pypsupertime"
-version = "1.2.0"
+version = "1.2.1"
 authors = [
   { name="Julian Flesch", email="julian.flesch@student.uni-tuebingen.de" },
 ]
