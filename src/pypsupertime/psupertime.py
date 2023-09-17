@@ -82,6 +82,7 @@ class Psupertime:
         self.regularization_params["n_jobs"] = regularization_params.get("n_jobs", self.n_jobs)
         self.regularization_params["n_folds"] = regularization_params.get("n_folds", self.n_folds)
         self.regularization_params["estimator"] = estimator_class
+        self.grid_search = None  # not fitted yet
 
     def check_is_fitted(self, raise_error=False):
         is_fitted = isinstance(self.model, PsupertimeBaseModel) and self.model.is_fitted_
