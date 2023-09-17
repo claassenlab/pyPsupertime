@@ -14,6 +14,7 @@ from typing import Iterable, Union
 
 import numpy as np
 from sklearn import metrics
+from sklearn.base import TransformerMixin
 import anndata as ad
 from scanpy import read_h5ad
 
@@ -28,6 +29,7 @@ class Psupertime:
                  n_batches=1,
                  verbosity=1,
                  regularization_params=dict(),
+                 preprocessing_class=Preprocessing,
                  preprocessing_params=dict(),
                  estimator_class=BatchSGDModel,
                  estimator_params=dict()):
@@ -54,7 +56,12 @@ class Psupertime:
         if not isinstance(preprocessing_params, dict):
             raise ValueError("Parameter estimator_params is not of type dict. Received: ", preprocessing_params)
         
-        self.preprocessing = Preprocessing(**preprocessing_params)
+        if preprocessing_class is None:
+            self.preprocessing = None
+        else:
+            if not issubclass(preprocessing_class, TransformerMixin):
+                raise ValueError("Parameter preprocessing_class must be None or of type sklearn.base.TransformerMixin. Received: %s" % preprocessing_class)
+            self.preprocessing = preprocessing_class(**preprocessing_params)
 
         # Validate estimator params and instantiate model
         if not isinstance(estimator_params, dict):
@@ -119,9 +126,10 @@ class Psupertime:
         adata.obs["ordinal_label"] = transform_labels(ordinal_data)
 
         # Run Preprocessing
-        print("Preprocessing", end="\r")
-        adata = self.preprocessing.fit_transform(adata)
-        print("Preprocessing: done. mode='%s', n_genes=%s, n_cells=%s" % (self.preprocessing.select_genes, adata.n_vars, adata.n_obs))
+        if self.preprocessing is not None:
+            print("Preprocessing", end="\r")
+            adata = self.preprocessing.fit_transform(adata)
+            print("Preprocessing: done. mode='%s', n_genes=%s, n_cells=%s" % (self.preprocessing.select_genes, adata.n_vars, adata.n_obs))
 
         # TODO: Test / Train split required? -> produce two index arrays, to avoid copying the data?
 
