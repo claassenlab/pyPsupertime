@@ -89,7 +89,16 @@ For a complete overview, look at the [documentation](https://pypsupertime.readth
 Development Roadmap
 -------------------
 
-* Extension of the `pypsupertime.plots` module with further analyses
-* Extension of the Preprocessing to allow custom pipelines
-* Integration into the [scanpy](https://scanpy.readthedocs.io/en/stable/index.html) project
-* Unit Tests, when the code is stable enough
+- [ ] Extension of the `pypsupertime.plots` module with further analyses
+- [x] Extension of the Preprocessing to allow custom pipelines (see version 1.1.0)
+- [ ] Integration into the [scanpy](https://scanpy.readthedocs.io/en/stable/index.html) project
+- [ ] Unit Tests, when the code is stable enough
+
+Changelog:
+----------
+
+* Version 1.1.0: 
+    - Add `preprocessing_class` parameter to enable using custom / no preprocessing
+    - Adds heuristic for selecting the lowest regularization parameter when none is specified
+    - Adds shorthand for selecting optimal regularization parameter at 1/2 standard error from the best score
+    - Fix bug when using smooth with sparse matrices
