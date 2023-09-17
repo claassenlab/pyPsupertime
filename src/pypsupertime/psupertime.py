@@ -100,6 +100,7 @@ class Psupertime:
 
         # Validate adata or load the filename
         if isinstance(adata, str):
+            inplace = True  # set to True to return the anndata object afterwards
             filename = adata
             adata = read_h5ad(filename)
         

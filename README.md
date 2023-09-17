@@ -97,6 +97,9 @@ Development Roadmap
 Changelog:
 ----------
 
+* Version 1.2.0:
+    - Returns an anndata object in `Psupertime.run()` if a filename is given 
+
 * Versions 1.1.1, 1.1.2, 1.1.3: 
     - Bugfixes
 
