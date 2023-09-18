@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import SGDClassifier
 from sklearn import metrics
 from scipy import sparse
+import torch
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -16,6 +17,17 @@ from .preprocessing import restructure_X_to_bin, restructure_y_to_bin, transform
 
 # Maximum positive number before numpy 64bit float overflows in np.exp()
 MAX_EXP = 709
+
+
+class LogisticRegression(torch.nn.Module):
+
+    def __init__(self, input_dim):
+        super(LogisticRegression, self).__init__()
+        self.linear = torch.nn.Linear(input_dim, 1)
+
+    def forward(self, x):
+        outputs = torch.sigmoid(self.linear(x))
+        return outputs
 
 
 class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
@@ -33,8 +45,6 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
      and `"backward"`, corresponding to cumulative proportional odds, forward continuation ratio and
      backward continuation ratio.
     :type method: str 
-    :ivar binary_estimator_: sklearn model which is fitted on the ordinal binary logistic classification task
-    :type binary_estimator_: sklearn.base.ClassifierMixin
     :ivar regularization: parmeter controlling the sparsity of the model. Wrapper for the respective parameter
      of the nested `binary_estimator_`. Not necessary
     :type regularization: float
@@ -43,7 +53,6 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
 
     """
     method: str = "proportional"
-    binary_estimator_: BaseEstimator = None
     regularization: float
     random_state: int = 1234
     coef_: np.array
@@ -52,29 +61,20 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
     classes_: np.array
     is_fitted_: bool = False
 
-    @abstractmethod
-    def _binary_estimator_factory():
-        raise NotImplementedError()
- 
-    def get_binary_estimator(self):
-        """Returns the nested binary model extending `sklearn.base.BaseEstimator`
-
-        :raises ValueError: _description_
-        :return: _description_
-        :rtype: _type_
-        """
-        if self.binary_estimator_ is None:
-            self.binary_estimator_  = self._binary_estimator_factory()
-
-        if not isinstance(self.binary_estimator_, BaseEstimator):
-            raise ValueError("The underlying 'binary_estimator' is not a sklearn.base.BaseEstimator. Got this instead: ", self.binary_estimator_)
-        
-        return self.binary_estimator_
-
-    def _before_fit(self, data, targets):
+    def _before_fit(self, data, targets, sample_weights=None):
         data, targets = check_X_y(data, transform_labels(targets), accept_sparse=True)
         self.classes_ = np.unique(targets)
         self.k_ = len(self.classes_) - 1
+
+        try:
+            if sample_weights is not None:
+                if not len(sample_weights) == len(targets):
+                    raise ValueError("The parameter sample_weight has incompatible weight with the target vector. Shape: %s Expected: %s" % (len(sample_weights), len(targets)))
+
+        except TypeError as e:
+            print(e)
+            raise ValueError("The parameter sample_weights has no length. Received: %s" % sample_weights)
+        
         return data, targets
     
     def _after_fit(self, model):
@@ -85,6 +85,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         self.intercept_ = np.array(model.coef_[0, -self.k_:]) + model.intercept_  # thresholds
         self.coef_ = model.coef_[0, :-self.k_]   # weights
 
+    @abstractmethod
     def fit(self, data, targets, sample_weight=None):
         """Template fit function for derived models.
 
@@ -97,19 +98,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         :return: fitted estimator
         :rtype: PsupertimeBaseModel
         """
-        data, targets = self._before_fit(data, targets)
-
-        # convert to binary problem
-        data = restructure_X_to_bin(data, self.k_)
-        targets = restructure_y_to_bin(targets)
-
-        model = self.get_binary_estimator()
-        
-        weights = np.tile(sample_weight, self.k_) if sample_weight is not None else None
-        model.fit(data, targets, sample_weight=weights)
-        self._after_fit(model)
-
-        return self
+        pass
 
     def predict_proba(self, X):
         warnings.filterwarnings("once")
@@ -165,84 +154,6 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
                                 index=anndata.var.index.copy())
 
 
-class BaselineSGDModel(PsupertimeBaseModel):
-    """
-    Vanilla SGDClassifier wrapper derived from `PsupertimeBaseModel`
-
-    """
-    def __init__(self,
-                 method="proportional",
-                 max_iter=100, 
-                 random_state=1234, 
-                 regularization=0.01, 
-                 n_iter_no_change=5, 
-                 early_stopping=True,
-                 tol=1e-3,
-                 learning_rate="optimal",
-                 eta0=0,
-                 loss='log_loss', 
-                 penalty='elasticnet', 
-                 l1_ratio=1, 
-                 fit_intercept=True, 
-                 shuffle=True, 
-                 verbose=0, 
-                 epsilon=0.1, 
-                 n_jobs=1, 
-                 power_t=0.5, 
-                 validation_fraction=0.1,
-                 class_weight=None,
-                 warm_start=False,
-                 average=False):
-        
-        self.method = method
-
-        # SGD parameters
-        self.eta0 = eta0
-        self.learning_rate = learning_rate
-        self.max_iter = max_iter
-        self.random_state = random_state
-        self.regularization = regularization
-        self.loss = loss
-        self.penalty = penalty
-        self.l1_ratio = l1_ratio
-        self.fit_intercept = fit_intercept
-        self.shuffle = shuffle
-        self.verbose = verbose
-        self.epsilon = epsilon
-        self.n_jobs = n_jobs
-        self.power_t = power_t
-        self.validation_fraction = validation_fraction
-        self.class_weight = class_weight
-        self.warm_start = warm_start
-        self.average = average
-        self.early_stopping = early_stopping
-        self.n_iter_no_change = n_iter_no_change
-        self.tol = tol
-        
-    def _binary_estimator_factory(self):
-        return SGDClassifier(eta0 = self.eta0,
-                            learning_rate = self.learning_rate,
-                            max_iter = self.max_iter,
-                            random_state = self.random_state,
-                            alpha = self.regularization,
-                            loss = self.loss,
-                            penalty = self.penalty,
-                            l1_ratio = self.l1_ratio,
-                            fit_intercept = self.fit_intercept,
-                            shuffle = self.shuffle,
-                            verbose = self.verbose,
-                            epsilon = self.epsilon,
-                            n_jobs = self.n_jobs,
-                            power_t = self.power_t,
-                            validation_fraction = self.validation_fraction,
-                            class_weight = self.class_weight,
-                            warm_start = self.warm_start,
-                            average = self.average,
-                            early_stopping = self.early_stopping,
-                            n_iter_no_change = self.n_iter_no_change,
-                            tol = self.tol)
-
-
 class BatchSGDModel(PsupertimeBaseModel):
     """
     BatchSGDModel is a classifier derived from `PsupertimBaseModel` that wraps an `SGDClassifier`
@@ -262,43 +173,29 @@ class BatchSGDModel(PsupertimeBaseModel):
                  n_iter_no_change=5, 
                  early_stopping=True,
                  tol=1e-3,
-                 learning_rate="optimal",
-                 eta0=0,
-                 loss='log_loss', 
+                 learning_rate=0.1,
                  penalty='elasticnet', 
                  l1_ratio=0.75, 
-                 fit_intercept=True, 
                  shuffle=True, 
                  verbosity=0, 
                  epsilon=0.1, 
-                 n_jobs=1, 
-                 power_t=0.5, 
                  validation_fraction=0.1,
-                 class_weight=None,
-                 warm_start=False,
-                 average=False):
+                 class_weight=None):
 
         self.method = method
 
         # model hyperparameters
-        self.eta0 = eta0
         self.learning_rate = learning_rate
         self.max_iter = max_iter
         self.random_state = random_state
         self.regularization = regularization
-        self.loss = loss
         self.penalty = penalty
         self.l1_ratio = l1_ratio
-        self.fit_intercept = fit_intercept
         self.shuffle = shuffle
         self.verbosity = verbosity
         self.epsilon = epsilon
-        self.n_jobs = n_jobs
-        self.power_t = power_t
         self.validation_fraction = validation_fraction
         self.class_weight = class_weight
-        self.warm_start = warm_start
-        self.average = average
         self.early_stopping = early_stopping
         self.n_iter_no_change = n_iter_no_change
         self.tol = tol
@@ -311,29 +208,9 @@ class BatchSGDModel(PsupertimeBaseModel):
         self.coef_ = []
 
     def _binary_estimator_factory(self):
-        return SGDClassifier(eta0 = self.eta0,
-                            learning_rate = self.learning_rate,
-                            max_iter = self.max_iter,
-                            random_state = self.random_state,
-                            alpha = self.regularization,
-                            loss = self.loss,
-                            penalty = self.penalty,
-                            l1_ratio = self.l1_ratio,
-                            fit_intercept = self.fit_intercept,
-                            shuffle = self.shuffle,
-                            verbose = self.verbosity >= 3,
-                            epsilon = self.epsilon,
-                            n_jobs = self.n_jobs,
-                            power_t = self.power_t,
-                            validation_fraction = self.validation_fraction,
-                            class_weight = self.class_weight,
-                            warm_start = self.warm_start,
-                            average = self.average,
-                            early_stopping = False,  # has to be false to use partial_fit
-                            n_iter_no_change = self.n_iter_no_change,
-                            tol = self.tol)
+        return None
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y, sample_weights=None):
         """Fit ordinal logistic model. 
         Multiclass data is converted to binarized representation and one weight per feature, 
         as well as a threshold for each class is fitted with a binary logistic classifier.
@@ -352,7 +229,7 @@ class BatchSGDModel(PsupertimeBaseModel):
         :rtype: BatchSGDModel
         """
         rng = np.random.default_rng(self.random_state)
-        X, y = self._before_fit(X, y)
+        X, y = self._before_fit(X, y, sample_weights)
 
         if self.early_stopping:
             # TODO: This is a full copy of the input data -> split an index array instead and work with slices?
@@ -374,13 +251,31 @@ class BatchSGDModel(PsupertimeBaseModel):
         if sparse.issparse(X):
             thresholds = sparse.csr_matrix(thresholds)
 
-        model = self.get_binary_estimator()
         n = X.shape[0]
+        n_features = X.shape[1] + self.k_
+
+        # Logistic regression model, defined as a perceptron
+        model = LogisticRegression(input_dim=n_features)
+
+        # Adaptive momentum SGD optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.learning_rate)
+
+        # Loss function: Binary Cross Entropy = Log loss
+        criterion = torch.nn.BCELoss()
+
+        # Sample weight to balance classes of y
+        if sample_weights is None:
+            sample_weights = torch.Tensor(np.ones_like(y))
+        else:
+            sample_weights = torch.Tensor(sample_weights)
+
+        # Mask for applying penalty: Only apply to gene features, don't apply to thresholds
+        penalty_mask = torch.Tensor(np.concatenate((np.ones(X.shape[1]), np.zeros(self.k_))))
 
         # binarize only the labels already
-        y_bin = restructure_y_to_bin(y)
+        y_bin = torch.Tensor(restructure_y_to_bin(y))
         
-        # create an inex array and shuffle
+        # create an index array and shuffle
         sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
 
         # iterations over all data
@@ -401,17 +296,38 @@ class BatchSGDModel(PsupertimeBaseModel):
                 batch_idx_mod_n = batch_idx % n
                 
                 if sparse.issparse(X):
-                    X_batch = sparse.hstack((X[batch_idx_mod_n], thresholds[batch_idx // n]))
+                    # TODO: Fix sparsity! Converting to dense format is a hack to get this to work
+                    X_batch = torch.Tensor(sparse.hstack((X[batch_idx_mod_n], thresholds[batch_idx // n])).todense())
                 else:
-                    X_batch = np.hstack((X[batch_idx_mod_n,:], thresholds[batch_idx // n]))
+                    X_batch = torch.Tensor(np.hstack((X[batch_idx_mod_n,:], thresholds[batch_idx // n])))
                 
                 y_batch = y_bin[batch_idx]
                 start = end
-                weights = np.array(sample_weight)[batch_idx_mod_n] if sample_weight is not None else None
-                model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
+                sample_weights_batch = sample_weights[batch_idx_mod_n]
+
+                # Set stored gradients to zero
+                optimizer.zero_grad()
+
+                # Forward pass
+                outputs = model(X_batch)
+
+                # calculate parameter penalties
+                model_weights = list(model.parameters())[0]
+                l1_term = torch.norm(penalty_mask * model_weights, 1)  # **2 TODO: Find out why/if squared ... 
+                #l2_term = torch.norm(model_params, 2) ** 2
+
+                # calculate loss with sample_weights and penalty
+                loss = criterion(torch.squeeze(outputs), y_batch)
+                loss = loss + self.regularization * l1_term
+
+                # backward pass to calculate gradients
+                loss.backward()
+                
+                # update weights
+                optimizer.step()
 
             # Early stopping using the test data 
-            if self.early_stopping:
+            if False: #self.early_stopping:  # TODO: Disabled for now
 
                 # build test data in batches as needed to avoid keeping in memory
                 if self.early_stopping_batches:
@@ -447,7 +363,9 @@ class BatchSGDModel(PsupertimeBaseModel):
             if self.shuffle:
                 sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
 
-            # TODO: Learning Rate adjustments?
-
-        self._after_fit(model)
+        coef, intercept = tuple(model.parameters())
+        coef = coef.detach().numpy().flatten()
+        intercept = intercept.detach().numpy().flatten()
+        self.coef_ = coef[:-self.k_]
+        self.intercept_ = coef[-self.k_:] +  intercept
         return self
