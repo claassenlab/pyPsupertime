@@ -92,21 +92,22 @@ class Psupertime:
         else:
             return is_fitted
     
-    def run(self, adata: Union[ad.AnnData, str], ordinal_data: Union[Iterable, str], inplace=True):
+    def run(self, adata: Union[ad.AnnData, str], ordinal_data: Union[Iterable, str], copy=True):
         
+        if not copy:
+            warnings.warn("Setting parameter copy=False is not supported, yet. Returning a copy of adata ...")
+
         start_time = datetime.datetime.now()
 
         # TODO: respect verbosity setting everywhere
 
         # Validate adata or load the filename
-        if isinstance(adata, str):
-            inplace = False  # set to False to return the anndata object afterwards
+        if isinstance(adata, ad.AnnData):
+            adata = adata.copy()
+
+        elif isinstance(adata, str):
             filename = adata
             adata = read_h5ad(filename)
-        
-        elif isinstance(adata, ad.AnnData):
-            if not inplace:
-                adata = adata.copy()
 
         else:
             raise ValueError("Parameter adata must be a filename or anndata.AnnData object. Received: ", adata)
@@ -161,8 +162,7 @@ class Psupertime:
         self.is_fitted_ = True
         print("Total elapsed time: ", str(datetime.datetime.now() - start_time))
 
-        if not inplace:
-            return adata
+        return adata
     
     def refit_and_predict(self, adata, *args, **kwargs):
         self.check_is_fitted(raise_error=True)

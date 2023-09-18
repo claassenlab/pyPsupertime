@@ -96,6 +96,10 @@ Development Roadmap
 
 Changelog:
 ----------
+* Version 1.2.2: 
+    - Bugfixes
+    - Removes inplace option in `run()`. It cannot currently be enforced in preprocessing.
+        A copy of the input adata will always be created and the processed object returned.
 
 * Version 1.2.0:
     - Returns an anndata object in `Psupertime.run()` if a filename is given 
