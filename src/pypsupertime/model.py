@@ -187,7 +187,7 @@ class BatchSGDModel(PsupertimeBaseModel):
         # model hyperparameters
         self.learning_rate = learning_rate
         self.max_iter = max_iter
-        self.random_state = random_state
+        self.random_state = random_state  # TODO: currently not used in torch optimizer!
         self.regularization = regularization
         self.penalty = penalty
         self.l1_ratio = l1_ratio
@@ -327,7 +327,7 @@ class BatchSGDModel(PsupertimeBaseModel):
                 optimizer.step()
 
             # Early stopping using the test data 
-            if False: #self.early_stopping:  # TODO: Disabled for now
+            if self.early_stopping:  # TODO: Disabled for now
 
                 # build test data in batches as needed to avoid keeping in memory
                 if self.early_stopping_batches:
@@ -338,17 +338,24 @@ class BatchSGDModel(PsupertimeBaseModel):
                         batch_idx = test_indices[start:end]
                         batch_idx_mod_n = batch_idx % n_test
                         if sparse.issparse(X_test):
-                            X_test_batch = sparse.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
+                            # TODO: Fix sparsity! Converting to dense format is a hack to get this to work
+                            X_test_batch = torch.Tensor(sparse.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test])).todense())
                         else:
-                            X_test_batch = np.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test]))
+                            X_test_batch = torch.Tensor(np.hstack((X_test[batch_idx_mod_n], thresholds[batch_idx // n_test])))
                         
-                        scores.append(model.score(X_test_batch, y_test_bin[batch_idx]))
+                        with torch.no_grad():
+                            outputs_test = model(X_test_batch)
+                            predicted_test = outputs_test.round().detach().numpy()
+                            scores.append(metrics.accuracy_score(y_test_bin[batch_idx], predicted_test))
+
                         start = end          
                         
                     cur_score = np.mean(scores)
                 
                 else:
-                    cur_score = model.score(X_test_bin, y_test_bin)
+                    with torch.no_grad():
+                        predicted_test = model(X_test_bin).round().detach().numpy()
+                        cur_score = metrics.accuracy_score(y_test_bin, predicted_test)
 
                 if cur_score - self.tol > best_score:
                     best_score = cur_score
