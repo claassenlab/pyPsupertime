@@ -354,7 +354,7 @@ class BatchSGDModel(PsupertimeBaseModel):
                 
                 else:
                     with torch.no_grad():
-                        predicted_test = model(X_test_bin).round().detach().numpy()
+                        predicted_test = model(torch.Tensor(X_test_bin)).round().detach().numpy()
                         cur_score = metrics.accuracy_score(y_test_bin, predicted_test)
 
                 if cur_score - self.tol > best_score:
@@ -375,4 +375,7 @@ class BatchSGDModel(PsupertimeBaseModel):
         intercept = intercept.detach().numpy().flatten()
         self.coef_ = coef[:-self.k_]
         self.intercept_ = coef[-self.k_:] +  intercept
+
+        self.is_fitted_ = True  # :)
+
         return self
