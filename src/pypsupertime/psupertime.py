@@ -1,5 +1,5 @@
 from .preprocessing import Preprocessing, transform_labels
-from .model import BatchSGDModel, PsupertimeBaseModel
+from .model import SGDModel, ThresholdSGDModel, CumulativePenaltyModel, PsupertimeBaseModel
 from .parameter_search import RegularizationSearchCV
 from .plots import (plot_grid_search,
                     plot_identified_gene_coefficients, 
@@ -31,7 +31,7 @@ class Psupertime:
                  regularization_params=dict(),
                  preprocessing_class=Preprocessing,
                  preprocessing_params=dict(),
-                 estimator_class=BatchSGDModel,
+                 estimator_class=CumulativePenaltyModel,
                  estimator_params=dict()):
 
         self.verbosity = verbosity
@@ -200,3 +200,11 @@ class Psupertime:
     def plot_labels_over_psupertime(self, *args, **kwargs):
         self.check_is_fitted(raise_error=True)
         return plot_labels_over_psupertime(self.model, *args, **kwargs)
+
+    def plot_model_training(self):
+        self.check_is_fitted(raise_error=True)
+
+        if not self.model.track_scores:
+            raise ValueError("Cannot plot model training if 'track_scores' is set to false in self.model: %s" % self.model)
+
+        raise NotImplemented()
