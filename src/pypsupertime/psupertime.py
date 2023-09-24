@@ -1,5 +1,5 @@
 from .preprocessing import Preprocessing, transform_labels
-from .model import SGDModel, ThresholdSGDModel, CumulativePenaltyModel, PsupertimeBaseModel
+from .model import SGDModel, ThresholdSGDModel, CumulativePenaltySGDModel, PsupertimeBaseModel
 from .parameter_search import RegularizationSearchCV
 from .plots import (plot_grid_search,
                     plot_identified_gene_coefficients, 
@@ -31,7 +31,7 @@ class Psupertime:
                  regularization_params=dict(),
                  preprocessing_class=Preprocessing,
                  preprocessing_params=dict(),
-                 estimator_class=CumulativePenaltyModel,
+                 estimator_class=CumulativePenaltySGDModel,
                  estimator_params=dict()):
 
         self.verbosity = verbosity

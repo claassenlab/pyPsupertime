@@ -355,7 +355,7 @@ class SGDModel(PsupertimeBaseModel):
                  class_weight=None):
 
         super(SGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
-                                              regularization=regularization, learning_rate=learning_rate, epsilon=epsilon, verbosity=verbosity, shuffle=shuffle,
+                                              regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                               early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
                                               n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
         self.epsilon=epsilon 
@@ -463,7 +463,7 @@ class SGDModel(PsupertimeBaseModel):
         return self
 
 
-class CumulativePenaltyModel(PsupertimeBaseModel):
+class CumulativePenaltySGDModel(PsupertimeBaseModel):
     """
     BatchSGDModel is a classifier derived from `PsupertimBaseModel` that wraps an `SGDClassifier`
     as logistic binary estimator.
@@ -482,16 +482,15 @@ class CumulativePenaltyModel(PsupertimeBaseModel):
                  n_iter_no_change=5, 
                  early_stopping=True,
                  tol=1e-3,
-                 learning_rate=0.1,
+                 learning_rate=0,
                  penalty='elasticnet', 
                  l1_ratio=1, 
                  shuffle=True, 
                  verbosity=0, 
-                 epsilon=0.1, 
                  validation_fraction=0.1):
 
-        super(CumulativePenaltyModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
-                                        regularization=regularization, learning_rate=learning_rate, epsilon=epsilon, verbosity=verbosity, shuffle=shuffle,
+        super(CumulativePenaltySGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
+                                        regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                         early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
                                         n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
     
@@ -651,11 +650,10 @@ class ThresholdSGDModel(PsupertimeBaseModel):
                  l1_ratio=1, 
                  shuffle=True, 
                  verbosity=0, 
-                 epsilon=0.1, 
                  validation_fraction=0.1):
 
         super(ThresholdSGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
-                                        regularization=regularization, learning_rate=learning_rate, epsilon=epsilon, verbosity=verbosity, shuffle=shuffle,
+                                        regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                         early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
                                         n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
 
