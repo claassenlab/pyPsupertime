@@ -136,9 +136,11 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         if not isinstance(penalty, str) or penalty not in ["l1", "l2", "elasticnet"]:
             raise ValueError("Parameter penalty must be one of 'l1', 'l2', 'elasticnet'. received: %s" % penalty)
         
-        if self.penalty == "l1":
+        if penalty == "l1":
+            if l1_ratio != 1:
+                warnings.warn("Setting l1_ratio to 1, when using penalty='l1'")
             self.l1_ratio = 1
-        elif self.penalty == "l2":
+        elif penalty == "l2":
             self.l1_ratio = 0
         else:
             if not (0 <= l1_ratio and l1_ratio <= 1):
