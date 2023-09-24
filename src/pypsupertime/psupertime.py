@@ -37,10 +37,7 @@ class Psupertime:
         self.verbosity = verbosity
 
         # statistical method   
-        method_options = {"proportional", "forward", "backward"}
         self.method = method
-        if self.method not in method_options:
-            raise ValueError("Parameter method must be one of %s. Received: %s." % (method_options, self.method)) 
     
         # grid search params
         self.n_jobs = n_jobs

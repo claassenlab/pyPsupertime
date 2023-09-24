@@ -106,10 +106,6 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
     :ivar track_scores: Set to True to track training loss and degrees of freedom. In models that support early stopping, validation loss is also recorded
     :type track_scores: boolean
     """
-    method: str = "proportional"
-    regularization: float
-    random_state: int = 1234
-    track_scores: bool = False
     coef_: np.array
     intercept_: np.array
     k_: int = 0
@@ -134,7 +130,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
                  track_scores=False,
                  verbosity=0):
 
-        if not isinstance(method, str) or penalty not in ["proportional", "forward", "backward"]:
+        if not isinstance(method, str) or method not in ["proportional", "forward", "backward"]:
             raise ValueError('Parameter method must be one of "proportional", "forward", "backward". Received %s ' % method)
 
         if not isinstance(penalty, str) or penalty not in ["l1", "l2", "elasticnet"]:
@@ -352,12 +348,13 @@ class SGDModel(PsupertimeBaseModel):
                  verbosity=0, 
                  epsilon=0.1, 
                  validation_fraction=0.1,
-                 class_weight=None):
+                 class_weight=None,
+                 track_scores=False):
 
         super(SGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
                                               regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                               early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
-                                              n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
+                                              n_iter_no_change=n_iter_no_change, tol=tol, validation_fraction=validation_fraction, track_scores=track_scores)
         self.epsilon=epsilon 
         self.class_weight=class_weight
         self.model = None
@@ -487,12 +484,13 @@ class CumulativePenaltySGDModel(PsupertimeBaseModel):
                  l1_ratio=1, 
                  shuffle=True, 
                  verbosity=0, 
-                 validation_fraction=0.1):
+                 validation_fraction=0.1,
+                 track_scores=False):
 
         super(CumulativePenaltySGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
                                         regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                         early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
-                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
+                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction, track_scores=track_scores)
     
     def _collect_parameters(self):
 
@@ -650,12 +648,13 @@ class ThresholdSGDModel(PsupertimeBaseModel):
                  l1_ratio=1, 
                  shuffle=True, 
                  verbosity=0, 
-                 validation_fraction=0.1):
+                 validation_fraction=0.1,
+                 track_scores=False):
 
         super(ThresholdSGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
                                         regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                         early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
-                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
+                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction, track_scores=False)
 
         # defines the cutof, below weights will be set to 0 to inroduce sparsity
         self.sparsity_threshold=sparsity_threshold
