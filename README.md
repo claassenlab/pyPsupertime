@@ -97,8 +97,11 @@ Development Roadmap
 Changelog:
 ----------
 
-* Version 2.1.0: 
+* Version 2.1.7: 
     - Refactoring of model classes and PsupertimeBaseModel to remove redundancies and improve readability
+    - Bugfixes
+    - Changes defaults
+    - Tracks scores when refitting
 
 * Version 2.0.0:
     - Changes undelying binary model from sklearn.SGDClassifier to pytorch model to gain more control over the loss and penalty calculation. 
