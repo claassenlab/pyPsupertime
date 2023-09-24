@@ -213,7 +213,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
     def _init_training_loop(self):
         self.train_epoch_ = 1
         self.test_best_score_ = - np.inf
-        self.train_not_improved_for_ = 0
+        self.test_not_improved_for_ = 0
 
     def _check_early_stopping(self, test_loss=None, greater_is_better=False):
         # TODO: check early stopping
@@ -222,14 +222,14 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
             if greater_is_better:
                 test_loss = -1 * test_loss
 
-            if self.train_epoch_ is None or self.train_best_score_ is None or self.train_not_improved_for_:
+            if self.train_epoch_ is None or self.test_best_score_ is None or self.test_not_improved_for_:
                 self._init_training_loop()
 
             if test_loss - self.tol > self.test_best_score_:
                 self.test_best_score_ = test_loss
                 self.test_not_improved_for_ = 0
             else:
-                self.train_not_improved_for_ += 1
+                self.test_not_improved_for_ += 1
                 if self.test_not_improved_for_ >= self.n_iter_no_change:
                     if self.verbosity >= 2:
                         print("Stopped early at epoch ", self.train_epoch_, " Current score:", self.test_best_score_)
@@ -247,13 +247,12 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
             if test_loss is not None: 
                 self.test_losses_.append(test_loss)
 
-        if (self.train_epoch_ > self.max_iter or self._check_early_stopping(test_loss)):
+        if self.train_epoch_ > self.max_iter or self._check_early_stopping(test_loss):
             self.is_fitted_ = True
             return True
         
-        else:
-            self.train_epoch_ += 1        
-            return False
+        self.train_epoch_ += 1        
+        return False
 
     @abstractmethod
     def fit(self, data, targets, sample_weight=None):
@@ -337,10 +336,13 @@ class SGDModel(PsupertimeBaseModel):
                  method="proportional",
                  regularization=0.01, 
                  n_batches=1,
-                 max_iter=1000, 
+                 max_iter=100, 
                  random_state=1234, 
-                 learning_rate=0.1,
-                 early_stopping=True,
+                 learning_rate="optimal",
+                 eta0=0,
+                 power_t=0.5,
+                 average=False,
+                 early_stopping=False,
                  early_stopping_batches=False,
                  n_iter_no_change=5, 
                  tol=1e-3,
@@ -357,8 +359,11 @@ class SGDModel(PsupertimeBaseModel):
                                               regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                               early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
                                               n_iter_no_change=n_iter_no_change, tol=tol, validation_fraction=validation_fraction, track_scores=track_scores)
-        self.epsilon=epsilon 
-        self.class_weight=class_weight
+        self.eta0 = eta0
+        self.power_t = power_t
+        self.epsilon = epsilon 
+        self.average = average
+        self.class_weight = class_weight
         self.model = None
 
     def _init_binary_model(self):
@@ -367,18 +372,17 @@ class SGDModel(PsupertimeBaseModel):
                             max_iter = self.max_iter,
                             random_state = self.random_state,
                             alpha = self.regularization,
-                            loss = self.loss,
+                            loss = "log_loss",
                             penalty = self.penalty,
                             l1_ratio = self.l1_ratio,
-                            fit_intercept = self.fit_intercept,
+                            fit_intercept = True,
                             shuffle = self.shuffle,
                             verbose = self.verbosity >= 3,
                             epsilon = self.epsilon,
-                            n_jobs = self.n_jobs,
+                            n_jobs = 1,
                             power_t = self.power_t,
                             validation_fraction = self.validation_fraction,
                             class_weight = self.class_weight,
-                            warm_start = self.warm_start,
                             average = self.average,
                             early_stopping = False,  # has to be false to use partial_fit
                             n_iter_no_change = self.n_iter_no_change,
@@ -387,7 +391,7 @@ class SGDModel(PsupertimeBaseModel):
     def _collect_parameters(self):
 
         self.coef_ = self.model.coef_.flatten()[:-self.k_]
-        self.intercept_ = self.model.coef_.flatten()[-self.k_:] +  self.model.intercept
+        self.intercept_ = self.model.coef_.flatten()[-self.k_:] +  self.model.intercept_
 
     def fit(self, X, y, sample_weight=None):
         """Fit ordinal logistic model. 
@@ -475,11 +479,11 @@ class CumulativePenaltySGDModel(PsupertimeBaseModel):
                  method="proportional",
                  early_stopping_batches=False,
                  n_batches=1,
-                 max_iter=1000, 
+                 max_iter=100, 
                  random_state=1234, 
                  regularization=0.01, 
                  n_iter_no_change=5, 
-                 early_stopping=True,
+                 early_stopping=False,
                  tol=1e-3,
                  learning_rate=0,
                  penalty='elasticnet', 
@@ -639,11 +643,11 @@ class ThresholdSGDModel(PsupertimeBaseModel):
                  method="proportional",
                  early_stopping_batches=False,
                  n_batches=1,
-                 max_iter=1000, 
+                 max_iter=100, 
                  random_state=1234, 
                  regularization=0.01, 
                  n_iter_no_change=5, 
-                 early_stopping=True,
+                 early_stopping=False,
                  tol=1e-4,
                  learning_rate=0.1,
                  penalty='elasticnet', 
@@ -656,7 +660,7 @@ class ThresholdSGDModel(PsupertimeBaseModel):
         super(ThresholdSGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
                                         regularization=regularization, learning_rate=learning_rate, verbosity=verbosity, shuffle=shuffle,
                                         early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
-                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction, track_scores=False)
+                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction, track_scores=track_scores)
 
         # defines the cutof, below weights will be set to 0 to inroduce sparsity
         self.sparsity_threshold=sparsity_threshold
