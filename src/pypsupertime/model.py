@@ -222,9 +222,6 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
             if greater_is_better:
                 test_loss = -1 * test_loss
 
-            if self.train_epoch_ is None or self.test_best_score_ is None or self.test_not_improved_for_:
-                self._init_training_loop()
-
             if test_loss - self.tol > self.test_best_score_:
                 self.test_best_score_ = test_loss
                 self.test_not_improved_for_ = 0
@@ -239,6 +236,9 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
 
     def _training_step(self, train_loss=None, test_loss=None, dof=None):
         
+        if self.train_epoch_ is None or self.test_best_score_ is None or self.test_not_improved_for_:
+            self._init_training_loop()
+
         if self.track_scores:
             if train_loss is not None: 
                 self.train_losses_.append(train_loss)
