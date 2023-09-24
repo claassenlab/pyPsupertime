@@ -167,6 +167,9 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         self.early_stopping_batches = early_stopping_batches
         self.track_scores = track_scores
 
+        self.rng_ = None
+        self.model = None
+
         # training scores:
         self.train_loss_ = []
         self.train_dof_ = []
@@ -180,59 +183,79 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
 
         # fitting parameters for early stopping
         self.train_epoch_ = None
-        self.train_best_score_ = None
-        self.train_not_improved_for_ = None
+        self.test_best_score_ = None
+        self.test_not_improved_for_ = None
 
-    def _before_fit(self, data, targets, sample_weights=None):
+    def _before_fit(self, X, y, sample_weights=None):
+
+        self.rng_ = np.random.default_rng(self.random_state)
+
         self.is_fitted_ = False
 
-        data, targets = check_X_y(data, transform_labels(targets), accept_sparse=True)
-        self.classes_ = np.unique(targets)
+        X, y = check_X_y(X, transform_labels(y), accept_sparse=True)
+        self.classes_ = np.unique(y)
         self.k_ = len(self.classes_) - 1
 
         try:
             if sample_weights is not None:
-                if not len(sample_weights) == len(targets):
-                    raise ValueError("The parameter sample_weight has incompatible weight with the target vector. Shape: %s Expected: %s" % (len(sample_weights), len(targets)))
+                if not len(sample_weights) == len(y):
+                    raise ValueError("The parameter sample_weight has incompatible weight with the target vector. Shape: %s Expected: %s" % (len(sample_weights), len(y)))
 
         except TypeError as e:
             print(e)
             raise ValueError("The parameter sample_weights has no length. Received: %s" % sample_weights)
         
-        return data, targets
+        # Test split
+        X_test, y_test = None, None
+        if self.early_stopping:
+            X, X_test, y, y_test = train_test_split(X, y, test_size=self.validation_fraction, stratify=y, random_state=self.rng_.integers(9999))
+
+        return X, y, X_test, y_test
 
     def _init_training_loop(self):
         self.train_epoch_ = 1
-        self.train_best_score_ = - np.inf
+        self.test_best_score_ = - np.inf
         self.train_not_improved_for_ = 0
 
-    def _training_loop_step(self, X_test, y_test):
-
-        # TODO: copy parameters
-
-        # TODO: record training scores
-
+    def _check_early_stopping(self, test_loss=None, greater_is_better=False):
         # TODO: check early stopping
         if self.early_stopping:
 
+            if greater_is_better:
+                test_loss = -1 * test_loss
+
             if self.train_epoch_ is None or self.train_best_score_ is None or self.train_not_improved_for_:
                 self._init_training_loop()
-            
-            raise NotImplementedError("Early stopping is currently disabled. Please set max_iter accordingly.")
 
-            cur_score = None  # TODO: call the models .score function for this: Score on the multilabel-ordinal problem
-
-            if cur_score - self.tol > self.train_best_score_:
-                self.train_best_score_ = cur_score
-                self.train_not_improved_for_ = 0
+            if test_loss - self.tol > self.test_best_score_:
+                self.test_best_score_ = test_loss
+                self.test_not_improved_for_ = 0
             else:
                 self.train_not_improved_for_ += 1
-                if self.train_not_improved_for_ >= self.n_iter_no_change:
+                if self.test_not_improved_for_ >= self.n_iter_no_change:
                     if self.verbosity >= 2:
-                        print("Stopped early at epoch ", self.train_epoch_, " Current score:", self.train_best_score_)
+                        print("Stopped early at epoch ", self.train_epoch_, " Current score:", self.test_best_score_)
                     return True
 
         return False
+
+    def _training_step(self, train_loss=None, test_loss=None, dof=None):
+        
+        if self.track_scores:
+            if train_loss is not None: 
+                self.train_losses_.append(train_loss)
+            if dof is not None: 
+                self.train_dof.append(dof)
+            if test_loss is not None: 
+                self.test_losses_.append(test_loss)
+
+        if (self.train_epoch_ > self.max_iter or self._check_early_stopping(test_loss)):
+            self.is_fitted_ = True
+            return True
+        
+        else:
+            self.train_epoch_ += 1        
+            return False
 
     @abstractmethod
     def fit(self, data, targets, sample_weight=None):
@@ -362,6 +385,11 @@ class SGDModel(PsupertimeBaseModel):
                             n_iter_no_change = self.n_iter_no_change,
                             tol = self.tol)
 
+    def _collect_parameters(self):
+
+        self.coef_ = self.model.coef_.flatten()[:-self.k_]
+        self.intercept_ = self.model.coef_.flatten()[-self.k_:] +  self.model.intercept
+
     def fit(self, X, y, sample_weight=None):
         """Fit ordinal logistic model. 
         Multiclass data is converted to binarized representation and one weight per feature, 
@@ -380,29 +408,27 @@ class SGDModel(PsupertimeBaseModel):
         :return: fitted classifier
         :rtype: SGDModel
         """
-        rng = np.random.default_rng(self.random_state)
-        X, y = self._before_fit(X, y)
+        X, y, X_test, y_test = self._before_fit(X, y)
+        n = X.shape[0]
 
+        if X_test is not None and y_test is not None:
+            X_test = restructure_X_to_bin(X_test, self.k_)
+            y_test = restructure_y_to_bin(y_test)
+
+        # binarize only the labels already
+        y_bin = restructure_y_to_bin(y)
+        
         # diagonal matrix, to construct the binarized X per batch
         thresholds = np.identity(self.k_)
         if sparse.issparse(X):
             thresholds = sparse.csr_matrix(thresholds)
 
-        model = self._init_binary_model()
-        n = X.shape[0]
-
-        # binarize only the labels already
-        y_bin = restructure_y_to_bin(y)
-        
+        self.model = self._init_binary_model()
         # create an inex array and shuffle
-        sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+        sampled_indices = self.rng_.integers(len(y_bin), size=len(y_bin))
 
-        # iterations over all data
-        self.epoch = 0
-
-        while epoch < self.max_iter:
-
-            epoch += 1
+        self._init_training_loop()
+        while True:
 
             start = 0
             for i in range(1, self.n_batches+1):
@@ -418,192 +444,23 @@ class SGDModel(PsupertimeBaseModel):
                 y_batch = y_bin[batch_idx]
                 start = end
                 weights = np.array(sample_weight)[batch_idx_mod_n] if sample_weight is not None else None
-                model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
-                
-            self.train_losses_.append(metrics.log_loss(y_batch, model.predict_proba(X_batch)))
-            self.train_dof_.append(np.count_nonzero(model.coef_.flatten()))
-
+                self.model.partial_fit(X_batch, y_batch, classes=np.unique(y_batch), sample_weight=weights)
+            
+            train_loss = metrics.log_loss(y_batch, self.model.predict_proba(X_batch))
+            dof = np.count_nonzero(self.model.coef_.flatten())
+            test_loss = None
             if self.early_stopping:
-                pass
+                test_loss = metrics.log_loss(y_test, self.model.predict_proba(X_test))
+
+            training_finished =  self._training_step(train_loss, dof, test_loss)
+            if training_finished:
+                break
 
             if self.shuffle:
-                sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+                sampled_indices = self.rng_.integers(len(y_bin), size=len(y_bin))
 
-        self._after_fit(model)
+        self._collect_parameters()
         return self
-
-
-class ThresholdSGDModel(PsupertimeBaseModel):
-    """
-    BatchSGDModel is a classifier derived from `PsupertimBaseModel` that wraps an `SGDClassifier`
-    as logistic binary estimator.
-    
-    It overwrites the superclass `_binary_estimator_factory() and `fit()` methods. The latter is wrapping
-    the `SGDClassifier.partial_fit()` function to fit the model in batches for a reduced memory footprint.
-    
-    """
-    def __init__(self,
-                 sparsity_threshold=1e-3,
-                 method="proportional",
-                 early_stopping_batches=False,
-                 n_batches=1,
-                 max_iter=1000, 
-                 random_state=1234, 
-                 regularization=0.01, 
-                 n_iter_no_change=5, 
-                 early_stopping=True,
-                 tol=1e-4,
-                 learning_rate=0.1,
-                 penalty='elasticnet', 
-                 l1_ratio=1, 
-                 shuffle=True, 
-                 verbosity=0, 
-                 epsilon=0.1, 
-                 validation_fraction=0.1):
-
-        super(ThresholdSGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
-                                        regularization=regularization, learning_rate=learning_rate, epsilon=epsilon, verbosity=verbosity, shuffle=shuffle,
-                                        early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
-                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
-
-        # defines the cutof, below weights will be set to 0 to inroduce sparsity
-        self.sparsity_threshold=sparsity_threshold
-
-    def _apply_threshold(self, weights):
-        """
-        Applies the sparsity threshold to weights.
-        :param weights: Weights of a logistic model
-        :type weights: Needs to be a numpy array
-        """
-        weights[np.abs(weights) < self.sparsity_threshold] = 0
-        return weights
-
-    def fit(self, X, y, sample_weights=None):
-        """Fit ordinal logistic model. 
-        Multiclass data is converted to binarized representation and one weight per feature, 
-        as well as a threshold for each class is fitted with a binary logistic classifier.
-
-        Derived from a `sklearn.linear.SGDClassifier`, fitted in batches according to `self.n_batches` 
-        for reduced memory usage.
-        
-
-        :param X: Data as 2d-matrix
-        :type X: numpy.array or scipy.sparse
-        :param y: ordinal labels
-        :type y: Iterable
-        :param sample_weight: Label weights for fitting and scoring, defaults to None. Can be used for example for class balancing.
-        :type sample_weight: Iterable, optional
-        :return: fitted classifier
-        :rtype: BatchSGDModel
-        """
-        rng = np.random.default_rng(self.random_state)
-        X, y = self._before_fit(X, y, sample_weights)
-        
-        # diagonal matrix, to construct the binarized X per batch
-        thresholds = np.identity(self.k_)
-        if sparse.issparse(X):
-            thresholds = sparse.csr_matrix(thresholds)
-
-        n = X.shape[0]
-        n_features = X.shape[1] + self.k_
-
-        # Logistic regression model
-        torch.manual_seed(self.random_state)
-        model = BinaryLogisticRegression(input_dim=n_features)
-
-        # Applies Gradients each epoch
-        optimizer = torch.optim.SGD(model.parameters(), lr=self.learning_rate)
-
-        # Adapts Learning rate each epoch
-        lr_schedule = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-        
-        # Loss function: Binary Cross Entropy = Log loss
-        criterion = torch.nn.BCELoss(reduction="none")
-
-        # Sample weight to balance classes of y
-        if sample_weights is None:
-            sample_weights = torch.Tensor(np.ones_like(y))
-        else:
-            sample_weights = torch.Tensor(sample_weights)
-
-        # Mask for applying penalty: Only apply to gene features, don't apply to thresholds
-        penalty_mask = torch.Tensor(np.concatenate((np.ones(X.shape[1]), np.zeros(self.k_))))
-        
-        # binarize only the labels already
-        y_bin = torch.Tensor(restructure_y_to_bin(y))
-        
-        # create an index array and shuffle
-        sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
-
-        # iterations over all data
-        epoch = 0
-
-        # tracking previous scores for early stopping
-        best_score = - np.inf
-        n_no_improvement = 0
-
-        while epoch < self.max_iter:
-
-            epoch += 1
-            #print("Epoch:", epoch)
-            
-            start = 0
-            for i in range(1, self.n_batches+1):
-                end = (i * len(y_bin) // self.n_batches)
-                batch_idx = sampled_indices[start:end]
-                batch_idx_mod_n = batch_idx % n
-                
-                if sparse.issparse(X):
-                    # TODO: Fix sparsity! Converting to dense format is a hack to get this to work
-                    X_batch = torch.Tensor(sparse.hstack((X[batch_idx_mod_n], thresholds[batch_idx // n])).todense())
-                else:
-                    X_batch = torch.Tensor(np.hstack((X[batch_idx_mod_n,:], thresholds[batch_idx // n])))
-                
-                y_batch = y_bin[batch_idx]
-                start = end
-                sample_weights_batch = sample_weights[batch_idx_mod_n]
-
-                # Set stored gradients to zero
-                optimizer.zero_grad()
-                
-                # Forward pass
-                outputs = model(X_batch)
-
-                # calculate parameter penalties
-                weights, bias = tuple(model.parameters())
-                l1_term = torch.linalg.vector_norm(penalty_mask * weights, 1)
-                l2_term = torch.linalg.vector_norm(penalty_mask * weights, 2) ** 2
-
-                # calculate loss with and without regularization
-                loss = (criterion(torch.squeeze(outputs), y_batch) * sample_weights_batch).mean()
-                loss = loss + self.regularization * (self.l1_ratio * l1_term + (1 - self.l1_ratio) * l2_term)
-
-                # zerograd, backward pass and weight update WITH regularization
-                loss.backward()
-                optimizer.step() 
-
-            lr_schedule.step()
-            
-            if self.track_scores:
-                self.train_losses_.append(loss.tolist())
-                weights_thresh = self._apply_threshold(weights.squeeze().detach().numpy())
-                self.train_dof_.append(np.count_nonzero(weights_thresh))
-
-            # TODO: Early stopping
-
-            if self.shuffle:
-                sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
-
-        coef, intercept = tuple(model.parameters())
-        coef = coef.detach().numpy().flatten()
-        intercept = intercept.detach().numpy().flatten()
-        self.coef_ = self._apply_threshold(coef[:-self.k_])
-        self.intercept_ = coef[-self.k_:] +  intercept
-
-        self.is_fitted_ = True  # :)
-
-        return self
-    
 
 
 class CumulativePenaltyModel(PsupertimeBaseModel):
@@ -637,6 +494,14 @@ class CumulativePenaltyModel(PsupertimeBaseModel):
                                         regularization=regularization, learning_rate=learning_rate, epsilon=epsilon, verbosity=verbosity, shuffle=shuffle,
                                         early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
                                         n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
+    
+    def _collect_parameters(self):
+
+        coef, intercept = tuple(self.model.parameters())
+        coef = coef.detach().numpy().flatten()
+        intercept = intercept.detach().numpy().flatten()
+        self.coef_ = coef[:-self.k_]
+        self.intercept_ = coef[-self.k_:] +  intercept
 
     def fit(self, X, y, sample_weights=None):
         """Fit ordinal logistic model. 
@@ -657,14 +522,13 @@ class CumulativePenaltyModel(PsupertimeBaseModel):
         :rtype: BatchSGDModel
         """
         rng = np.random.default_rng(self.random_state)
-        X, y = self._before_fit(X, y, sample_weights)
-
-        X_test, y_test = None, None
-        if self.early_stopping:
-            X, X_test, y, y_test = train_test_split(X, y, test_size=self.validation_fraction, stratify=y, random_state=rng.integers(9999))
-
+        X, y, X_test, y_test = self._before_fit(X, y, sample_weights)
         n = X.shape[0]
         n_features = X.shape[1] + self.k_
+
+        if self.early_stopping:
+            X_test = torch.Tensor(restructure_X_to_bin(X_test, self.k_))
+            y_test = torch.Tensor(restructure_y_to_bin(y_test))
 
         # binarize only the labels already
         y_bin = torch.Tensor(restructure_y_to_bin(y))
@@ -699,20 +563,12 @@ class CumulativePenaltyModel(PsupertimeBaseModel):
         # cumulative penalty tracking
         u = torch.tensor(0.)
         q = torch.zeros(n_features)
-        
+        z = torch.zeros(n_features)
+
         # create an index array and shuffle
         sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
-
-        # iterations over all data
-        epoch = 0
-
-        # tracking previous scores for early stopping
-        best_score = - np.inf
-        n_no_improvement = 0
         
-        while epoch < self.max_iter:
-
-            epoch += 1
+        while True:
             
             start = 0
             for i in range(1, self.n_batches+1):
@@ -759,26 +615,182 @@ class CumulativePenaltyModel(PsupertimeBaseModel):
 
                     q = q + (weights.squeeze() - z)
 
-            if self.track_scores:
-                self.train_losses_.append(loss.tolist())
-                self.train_dof_.append(weights.squeeze().count_nonzero().tolist())
-            
-            # TODO: Early stopping
-            #converged, best_score, n_no_improvement = self._check_early_stopping_condition(X_test, y_test, best_score=best_score, n_no_improvement=n_no_improvement, epoch=epoch)
-            #if converged:
-            #    break
+            test_loss = None
+            if self.early_stopping:
+                with torch.no_grad():
+                    outputs = self.model(X_test)
+                    test_loss = criterion(torch.squeeze(outputs), y_test).mean().tolist()
+
+            training_finished =  self._training_step(train_loss=loss.tolist(), dof=weights.squeeze().count_nonzero().tolist(), test_loss=test_loss)
+            if training_finished:
+                break
 
             if self.shuffle:
                 sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
 
             lr_schedule.step()
         
+        self._collect_parameters()
+        return self
+
+
+class ThresholdSGDModel(PsupertimeBaseModel):
+    def __init__(self,
+                 sparsity_threshold=1e-3,
+                 method="proportional",
+                 early_stopping_batches=False,
+                 n_batches=1,
+                 max_iter=1000, 
+                 random_state=1234, 
+                 regularization=0.01, 
+                 n_iter_no_change=5, 
+                 early_stopping=True,
+                 tol=1e-4,
+                 learning_rate=0.1,
+                 penalty='elasticnet', 
+                 l1_ratio=1, 
+                 shuffle=True, 
+                 verbosity=0, 
+                 epsilon=0.1, 
+                 validation_fraction=0.1):
+
+        super(ThresholdSGDModel, self).__init__(method=method, penalty=penalty, l1_ratio=l1_ratio, n_batches=n_batches, max_iter=max_iter, random_state=random_state,
+                                        regularization=regularization, learning_rate=learning_rate, epsilon=epsilon, verbosity=verbosity, shuffle=shuffle,
+                                        early_stopping=early_stopping, early_stopping_batches=early_stopping_batches, 
+                                        n_iter_no_change=n_iter_no_change,tol=tol, validation_fraction=validation_fraction)
+
+        # defines the cutof, below weights will be set to 0 to inroduce sparsity
+        self.sparsity_threshold=sparsity_threshold
+
+    def _apply_threshold(self, weights):
+        """
+        Applies the sparsity threshold to weights.
+        :param weights: Weights of a logistic model
+        :type weights: Needs to be a numpy array
+        """
+        weights[np.abs(weights) < self.sparsity_threshold] = 0
+        return weights
+
+    def _collect_parameters(self):
+
         coef, intercept = tuple(self.model.parameters())
         coef = coef.detach().numpy().flatten()
         intercept = intercept.detach().numpy().flatten()
-        self.coef_ = coef[:-self.k_]
+        self.coef_ = self._apply_threshold(coef[:-self.k_])
         self.intercept_ = coef[-self.k_:] +  intercept
 
-        self.is_fitted_ = True
+    def fit(self, X, y, sample_weights=None):
+        """Fit ordinal logistic model. 
+        Multiclass data is converted to binarized representation and one weight per feature, 
+        as well as a threshold for each class is fitted with a binary logistic classifier.
 
+        Derived from a `sklearn.linear.SGDClassifier`, fitted in batches according to `self.n_batches` 
+        for reduced memory usage.
+        
+
+        :param X: Data as 2d-matrix
+        :type X: numpy.array or scipy.sparse
+        :param y: ordinal labels
+        :type y: Iterable
+        :param sample_weight: Label weights for fitting and scoring, defaults to None. Can be used for example for class balancing.
+        :type sample_weight: Iterable, optional
+        :return: fitted classifier
+        :rtype: BatchSGDModel
+        """
+        rng = np.random.default_rng(self.random_state)
+        X, y, X_test, y_test = self._before_fit(X, y, sample_weights)
+
+        if self.early_stopping:
+            X_test = torch.Tensor(restructure_X_to_bin(X_test, self.k_))
+            y_test = torch.Tensor(restructure_y_to_bin(y_test))
+
+        # diagonal matrix, to construct the binarized X per batch
+        thresholds = np.identity(self.k_)
+        if sparse.issparse(X):
+            thresholds = sparse.csr_matrix(thresholds)
+
+        n = X.shape[0]
+        n_features = X.shape[1] + self.k_
+
+        # Logistic regression model
+        torch.manual_seed(self.random_state)
+        self.model = BinaryLogisticRegression(input_dim=n_features)
+
+        # Applies Gradients each epoch
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
+
+        # Adapts Learning rate each epoch
+        lr_schedule = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+        
+        # Loss function: Binary Cross Entropy = Log loss
+        criterion = torch.nn.BCELoss(reduction="none")
+
+        # Sample weight to balance classes of y
+        if sample_weights is None:
+            sample_weights = torch.Tensor(np.ones_like(y))
+        else:
+            sample_weights = torch.Tensor(sample_weights)
+
+        # Mask for applying penalty: Only apply to gene features, don't apply to thresholds
+        penalty_mask = torch.Tensor(np.concatenate((np.ones(X.shape[1]), np.zeros(self.k_))))
+        
+        # binarize only the labels already
+        y_bin = torch.Tensor(restructure_y_to_bin(y))
+        
+        # create an index array and shuffle
+        sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+
+        while True:
+
+            start = 0
+            for i in range(1, self.n_batches+1):
+                end = (i * len(y_bin) // self.n_batches)
+                batch_idx = sampled_indices[start:end]
+                batch_idx_mod_n = batch_idx % n
+                
+                if sparse.issparse(X):
+                    # TODO: Fix sparsity! Converting to dense format is a hack to get this to work
+                    X_batch = torch.Tensor(sparse.hstack((X[batch_idx_mod_n], thresholds[batch_idx // n])).todense())
+                else:
+                    X_batch = torch.Tensor(np.hstack((X[batch_idx_mod_n,:], thresholds[batch_idx // n])))
+                
+                y_batch = y_bin[batch_idx]
+                start = end
+                sample_weights_batch = sample_weights[batch_idx_mod_n]
+
+                # Set stored gradients to zero
+                optimizer.zero_grad()
+                
+                # Forward pass
+                outputs = self.model(X_batch)
+
+                # calculate parameter penalties
+                weights, bias = tuple(self.model.parameters())
+                l1_term = torch.linalg.vector_norm(penalty_mask * weights, 1)
+                l2_term = torch.linalg.vector_norm(penalty_mask * weights, 2) ** 2
+
+                # calculate loss with and without regularization
+                loss = (criterion(torch.squeeze(outputs), y_batch) * sample_weights_batch).mean()
+                loss = loss + self.regularization * (self.l1_ratio * l1_term + (1 - self.l1_ratio) * l2_term)
+
+                # zerograd, backward pass and weight update WITH regularization
+                loss.backward()
+                optimizer.step() 
+
+            lr_schedule.step()
+
+            test_loss = None
+            if self.early_stopping:
+                with torch.no_grad():
+                    outputs = self.model(X_test)
+                    test_loss = criterion(torch.squeeze(outputs), y_test).mean().tolist()
+
+            training_finished = self._training_step(train_loss=loss.tolist(), dof=weights.squeeze().count_nonzero().tolist(), test_loss=test_loss)
+            if training_finished:
+                break
+
+            if self.shuffle:
+                sampled_indices = rng.integers(len(y_bin), size=len(y_bin))
+
+        self._collect_parameters()
         return self
