@@ -181,7 +181,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
 
         # fitting parameters for early stopping
         self.train_epoch_ = None
-        self.test_best_score_ = None
+        self.test_best_loss_ = None
         self.test_not_improved_for_ = None
 
     def _before_fit(self, X, y, sample_weights=None):
@@ -215,7 +215,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         self.train_dof_ = []
         self.test_losses_ = []
         self.train_epoch_ = 1
-        self.test_best_score_ = - np.inf
+        self.test_best_loss_ = np.inf
         self.test_not_improved_for_ = 0
 
     def _check_early_stopping(self, test_loss=None, greater_is_better=False):
@@ -224,21 +224,21 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
             if greater_is_better:
                 test_loss = -1 * test_loss
 
-            if test_loss - self.tol > self.test_best_score_:
-                self.test_best_score_ = test_loss
+            if test_loss + self.tol < self.test_best_loss_:
+                self.test_best_loss_ = test_loss
                 self.test_not_improved_for_ = 0
             else:
                 self.test_not_improved_for_ += 1
                 if self.test_not_improved_for_ >= self.n_iter_no_change:
                     if self.verbosity >= 2:
-                        print("Stopped early at epoch ", self.train_epoch_, " Current score:", self.test_best_score_)
+                        print("Stopped early at epoch ", self.train_epoch_, " Current score:", self.test_best_loss_)
                     return True
 
         return False
 
     def _training_step(self, train_loss=None, test_loss=None, dof=None, **kwargs):
         
-        if self.train_epoch_ is None or self.test_best_score_ is None or self.test_not_improved_for_:
+        if self.train_epoch_ is None or self.test_best_loss_ is None or self.test_not_improved_for_:
             self._init_training_loop()
 
         if self.track_scores:

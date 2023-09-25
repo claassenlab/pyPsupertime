@@ -96,6 +96,8 @@ Development Roadmap
 
 Changelog:
 ----------
+* Version 2.1.10:
+    - Fixes early stopping check
 
 * Version 2.1.9:
     - Adds Pytorch dependency for new models to buildfile
