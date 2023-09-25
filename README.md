@@ -97,6 +97,9 @@ Development Roadmap
 Changelog:
 ----------
 
+* Version 2.1.9:
+    - Adds Pytorch dependency for new models to buildfile
+
 * Version 2.1.8:
     - Bugfixes in score tracking
     - Adds parameter random_state to psupertime directly (had to be passed as estimator_param before)
