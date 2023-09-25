@@ -97,6 +97,10 @@ Development Roadmap
 Changelog:
 ----------
 
+* Version 2.1.8:
+    - Bugfixes in score tracking
+    - Adds parameter random_state to psupertime directly (had to be passed as estimator_param before)
+
 * Version 2.1.7: 
     - Refactoring of model classes and PsupertimeBaseModel to remove redundancies and improve readability
     - Bugfixes
