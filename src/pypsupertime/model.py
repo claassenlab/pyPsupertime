@@ -169,9 +169,9 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         self.model = None
 
         # training scores:
-        self.train_loss_ = []
+        self.train_losses_ = []
         self.train_dof_ = []
-        self.validation_loss_ = []
+        self.test_losses_ = []
 
         # learned model parameters
         self.k_ = None
@@ -211,12 +211,14 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
         return X, y, X_test, y_test
 
     def _init_training_loop(self):
+        self.train_losses_ = []
+        self.train_dof_ = []
+        self.test_losses_ = []
         self.train_epoch_ = 1
         self.test_best_score_ = - np.inf
         self.test_not_improved_for_ = 0
 
     def _check_early_stopping(self, test_loss=None, greater_is_better=False):
-        # TODO: check early stopping
         if self.early_stopping:
 
             if greater_is_better:
@@ -234,7 +236,7 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
 
         return False
 
-    def _training_step(self, train_loss=None, test_loss=None, dof=None):
+    def _training_step(self, train_loss=None, test_loss=None, dof=None, **kwargs):
         
         if self.train_epoch_ is None or self.test_best_score_ is None or self.test_not_improved_for_:
             self._init_training_loop()
@@ -243,11 +245,11 @@ class PsupertimeBaseModel(ClassifierMixin, BaseEstimator, ABC):
             if train_loss is not None: 
                 self.train_losses_.append(train_loss)
             if dof is not None: 
-                self.train_dof.append(dof)
+                self.train_dof_.append(dof)
             if test_loss is not None: 
                 self.test_losses_.append(test_loss)
 
-        if self.train_epoch_ > self.max_iter or self._check_early_stopping(test_loss):
+        if self.train_epoch_ > self.max_iter or self._check_early_stopping(test_loss, **kwargs):
             self.is_fitted_ = True
             return True
         

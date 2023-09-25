@@ -27,6 +27,7 @@ class Psupertime:
                  n_folds=5,
                  n_jobs=5,
                  n_batches=1,
+                 random_state=1234,
                  verbosity=1,
                  regularization_params=dict(),
                  preprocessing_class=Preprocessing,
@@ -35,6 +36,7 @@ class Psupertime:
                  estimator_params=dict()):
 
         self.verbosity = verbosity
+        self.random_state = random_state
 
         # statistical method   
         self.method = method
@@ -67,6 +69,7 @@ class Psupertime:
         self.estimator_params = estimator_params
         self.estimator_params["n_batches"] = self.n_batches
         self.estimator_params["method"] = self.method
+        self.estimator_params["random_state"] = self.random_state
         self.model = None  # not fitted yet
 
         if not issubclass(estimator_class, PsupertimeBaseModel):
