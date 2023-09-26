@@ -89,6 +89,7 @@ For a complete overview, look at the [documentation](https://pypsupertime.readth
 Development Roadmap
 -------------------
 
+- [ ] Add "layer"/"rep" parameter to Psupertime for specifying data in adata objects 
 - [ ] Extension of the `pypsupertime.plots` module with further analyses
 - [x] Extension of the Preprocessing to allow custom pipelines (see version 1.1.0)
 - [ ] Integration into the [scanpy](https://scanpy.readthedocs.io/en/stable/index.html) project
@@ -96,6 +97,10 @@ Development Roadmap
 
 Changelog:
 ----------
+
+* Version 2.1.11:
+    - Force track scores when refitting
+
 * Version 2.1.10:
     - Fixes early stopping check
 

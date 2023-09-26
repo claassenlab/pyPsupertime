@@ -170,6 +170,7 @@ class Psupertime:
         print("Input Data: n_genes=%s, n_cells=%s" % (adata.n_vars, adata.n_obs))
         print("Refit on all data", end="\r")
         self.model = self.grid_search.get_optimal_model(*args, **kwargs)
+        self.model.track_scores = True
         self.model.fit(adata.X, adata.obs.ordinal_label)
         acc = metrics.accuracy_score(self.model.predict(adata.X), adata.obs.ordinal_label)
         dof = np.count_nonzero(self.model.coef_)
