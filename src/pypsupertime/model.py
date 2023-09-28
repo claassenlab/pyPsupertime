@@ -457,7 +457,7 @@ class SGDModel(PsupertimeBaseModel):
             if self.early_stopping:
                 test_loss = metrics.log_loss(y_test, self.model.predict_proba(X_test))
 
-            training_finished =  self._training_step(train_loss, dof, test_loss)
+            training_finished =  self._training_step(train_loss, test_loss, dof)
             if training_finished:
                 break
 

@@ -89,6 +89,8 @@ For a complete overview, look at the [documentation](https://pypsupertime.readth
 Development Roadmap
 -------------------
 
+- [ ] Hihgly variable gene selection
+- [ ] (Re-)Add early stopping
 - [ ] Add "layer"/"rep" parameter to Psupertime for specifying data in adata objects 
 - [ ] Extension of the `pypsupertime.plots` module with further analyses
 - [x] Extension of the Preprocessing to allow custom pipelines (see version 1.1.0)
@@ -97,6 +99,9 @@ Development Roadmap
 
 Changelog:
 ----------
+
+* Version 2.1.12:
+    - Fixes bug affecting score tracking in SGDModel
 
 * Version 2.1.11:
     - Force track scores when refitting
