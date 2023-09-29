@@ -652,6 +652,7 @@ class ThresholdSGDModel(PsupertimeBaseModel):
                  early_stopping=False,
                  tol=1e-4,
                  learning_rate=0.1,
+                 gamma=0.95,
                  penalty='elasticnet', 
                  l1_ratio=1, 
                  shuffle=True, 
@@ -666,6 +667,9 @@ class ThresholdSGDModel(PsupertimeBaseModel):
 
         # defines the cutof, below weights will be set to 0 to inroduce sparsity
         self.sparsity_threshold=sparsity_threshold
+       
+        # gamma for exponential learning rate decay
+        self.gamma = gamma
 
     def _apply_threshold(self, weights):
         """
@@ -725,7 +729,7 @@ class ThresholdSGDModel(PsupertimeBaseModel):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
 
         # Adapts Learning rate each epoch
-        lr_schedule = lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
+        lr_schedule = lr_scheduler.ExponentialLR(optimizer, gamma=self.gamma)
         
         # Loss function: Binary Cross Entropy = Log loss
         criterion = torch.nn.BCELoss(reduction="none")

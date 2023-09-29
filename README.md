@@ -100,6 +100,9 @@ Development Roadmap
 Changelog:
 ----------
 
+* Version 2.1.13:
+    - Adds gamma hyperparameter for exponential learning rate decay to ThresholdSGDModel
+
 * Version 2.1.12:
     - Fixes bug affecting score tracking in SGDModel
 
